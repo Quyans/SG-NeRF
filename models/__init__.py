@@ -1,12 +1,12 @@
 import importlib
 from models.base_model import BaseModel
 
-
+#对model的多继承,选择合适的model进行import
 def find_model_class_by_name(model_name):
     # Given the option --model [modelname],
     # the file "models/modelname_model.py"
     # will be imported.
-    model_filename = "models." + model_name + "_model"
+    model_filename = "models." + model_name + "_model"#In general: mvs_points_volumetric_model
     modellib = importlib.import_module(model_filename)
 
     # In the file, the class called ModelNameModel() will
@@ -24,7 +24,6 @@ def find_model_class_by_name(model_name):
             "In %s.py, there should be a subclass of BaseModel with class name that matches %s in lowercase."
             % (model_filename, target_model_name))
         exit(0)
-
     return model
 
 
@@ -32,7 +31,7 @@ def get_option_setter(model_name):
     model_class = find_model_class_by_name(model_name)
     return model_class.modify_commandline_options
 
-
+# In general :mvs_points_volumetric_model
 def create_model(opt):
     model = find_model_class_by_name(opt.model)
     instance = model()

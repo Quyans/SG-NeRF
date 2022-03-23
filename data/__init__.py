@@ -7,7 +7,7 @@ from .base_dataset import BaseDataset
 import numpy as np
 import time
 
-def find_dataset_class_by_name(name):
+def find_dataset_class_by_name(name):##In default Scannet training :name == 'scannet_ft'
     '''
     Input
     name: string with underscore representation
@@ -37,7 +37,7 @@ def get_option_setter(dataset_name):
 
 
 def create_dataset(opt):
-    dataset = find_dataset_class_by_name(opt.dataset_name)
+    dataset = find_dataset_class_by_name(opt.dataset_name)#In default Scannet training :'scannet_ft'
     instance = dataset()
     instance.initialize(opt)
     print("dataset [{}] was created".format(instance.name()))

@@ -584,7 +584,7 @@ def main():
     opt = TrainOptions().parse()
     cur_device = torch.device('cuda:{}'.format(opt.gpu_ids[0]) if opt.
                               gpu_ids else torch.device('cpu'))
-    print("opt.color_loss_items ", opt.color_loss_items)
+    #print("opt.color_loss_items ", opt.color_loss_items)
 
     if opt.debug:
         torch.autograd.set_detect_anomaly(True)
@@ -595,7 +595,7 @@ def main():
             '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++' +
             fmt.END)
     visualizer = Visualizer(opt)
-    train_dataset = create_dataset(opt)
+    train_dataset = create_dataset(opt) # In defalu scannet: /data/scannet_ft_dataset.py
     normRw2c = train_dataset.norm_w2c[:3,:3] # torch.eye(3, device="cuda") #
     img_lst=None
     best_PSNR=0.0
@@ -604,6 +604,7 @@ def main():
     with torch.no_grad():
         print(opt.checkpoints_dir + opt.name + "/*_net_ray_marching.pth")
         if len([n for n in glob.glob(opt.checkpoints_dir + opt.name + "/*_net_ray_marching.pth") if os.path.isfile(n)]) > 0:
+            #Here maybe rendering a plane ,not 360
             if opt.bgmodel.endswith("plane"):
                 _, _, _, _, _, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst = gen_points_filter_embeddings(train_dataset, visualizer, opt)
 
@@ -634,7 +635,7 @@ def main():
             opt.resume_dir=resume_dir
             opt.resume_iter = resume_iter
             opt.is_train=True
-            model = create_model(opt)
+            model = create_model(opt)#In default train scannet:initialize /models/mvs_points_volumetric_model.py
         elif opt.load_points < 1:
             points_xyz_all, points_embedding_all, points_color_all, points_dir_all, points_conf_all, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst = gen_points_filter_embeddings(train_dataset, visualizer, opt)
             opt.resume_iter = opt.resume_iter if opt.resume_iter != "latest" else get_latest_epoch(opt.resume_dir)
@@ -745,7 +746,7 @@ def main():
             opt.is_train = True
             opt.mode = 2
             model = create_model(opt)
-
+        # None in default train scannet
         if points_xyz_all is not None:
             if opt.bgmodel.startswith("planepoints"):
                 gen_pnts, gen_embedding, gen_dir, gen_color, gen_conf = train_dataset.get_plane_param_points()

@@ -103,7 +103,7 @@ num_pos_freqs=10
 num_viewdir_freqs=4 #6
 
 random_sample='random'
-random_sample_size=56 # 32 * 32 = 1024
+random_sample_size=28 # 32 * 32 = 1024
 
 batch_size=1
 
@@ -113,7 +113,7 @@ lr_policy="iter_exponential_decay"
 lr_decay_iters=1000000
 lr_decay_exp=0.1
 
-gpu_ids='2'
+gpu_ids='0'
 
 checkpoints_dir="${nrCheckpoint}/scannet/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
@@ -128,7 +128,7 @@ n_threads=2
 
 train_and_test=0 #1
 test_num=10
-test_freq=10000 #  #100 #1200 #1200 #30184 #30184 #50000
+test_freq=100 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=40
 test_num_step=50
 

@@ -23,7 +23,7 @@ import cv2
 # import torch.nn.functional as F
 from .data_utils import get_dtu_raydir
 from plyfile import PlyData, PlyElement
-
+#左手系<-->右手系
 FLIP_Z = np.asarray([
     [1,0,0],
     [0,1,0],
@@ -98,7 +98,7 @@ class ScannetFtDataset(BaseDataset):
 
         self.scale_factor = 1.0 / 1.0
         self.max_len = max_len
-        self.near_far = [opt.near_plane, opt.far_plane]
+        self.near_far = [opt.near_plane, opt.far_plane]#0.1~8
         self.blender2opencv = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
         self.height, self.width = int(self.img_wh[1]), int(self.img_wh[0])
 
@@ -271,7 +271,7 @@ class ScannetFtDataset(BaseDataset):
             fm = self.variance_of_laplacian(gray)
             blur_score.append(fm)
         blur_score = np.asarray(blur_score)
-        ids = blur_score.argsort()[:150]
+        ids = blur_score.argsort()[:150]#认为拉普拉斯算子的方差小的图片为blur图片
         allind = np.asarray(list)
         print("most blurry images", allind[ids])
 
@@ -293,13 +293,14 @@ class ScannetFtDataset(BaseDataset):
 
     def build_init_metas(self):
         colordir = os.path.join(self.data_dir, self.scan, "exported/color")
+        # 我认为这么做主要是 os.listdir()得到的list无序，所以重新按顺序存入数组
         self.image_paths = [f for f in os.listdir(colordir) if os.path.isfile(os.path.join(colordir, f))]
         self.image_paths = [os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(i)) for i in range(len(self.image_paths))]
         self.all_id_list = self.filter_valid_id(list(range(len(self.image_paths))))
         if len(self.all_id_list) > 2900: # neural point-based graphics' configuration
-            self.test_id_list = self.all_id_list[::100]
-            self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]
-        else:  # nsvf configuration
+            self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
+            self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做测试
+        else:  # nsvf configuration->go this way in defalut train scannet
             step=5
             self.train_id_list = self.all_id_list[::step]
             self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
@@ -316,7 +317,7 @@ class ScannetFtDataset(BaseDataset):
         empty_lst=[]
         for id in id_list:
             c2w = np.loadtxt(os.path.join(self.data_dir, self.scan, "exported/pose", "{}.txt".format(id))).astype(np.float32)
-            if np.max(np.abs(c2w)) < 30:
+            if np.max(np.abs(c2w)) < 30:# why？针对scannet的trick吗，累加大于30证明太离谱的数据？
                 empty_lst.append(id)
         return empty_lst
 
@@ -336,7 +337,7 @@ class ScannetFtDataset(BaseDataset):
         # print("camposes", camposes.shape, centerdirs.shape)
         return torch.as_tensor(camposes, device="cuda", dtype=torch.float32), torch.as_tensor(centerdirs, device="cuda", dtype=torch.float32)
 
-
+    #！！没看
     def build_proj_mats(self, list=None, norm_w2c=None, norm_c2w=None):
         proj_mats, intrinsics, world2cams, cam2worlds = [], [], [], []
         list = self.id_list if list is None else list
@@ -371,7 +372,7 @@ class ScannetFtDataset(BaseDataset):
     def define_transforms(self):
         self.transform = T.ToTensor()
 
-
+    #！！没看
     def parse_mesh(self):
         points_path = os.path.join(self.data_dir, self.scan, "exported/pcd.ply")
         mesh_path = os.path.join(self.data_dir, self.scan, self.scan + "_vh_clean.ply")
@@ -390,7 +391,7 @@ class ScannetFtDataset(BaseDataset):
         ply = PlyData([PlyElement.describe(vertices, 'vertex')], text=False)
         ply.write(points_path)
 
-
+    #！！没看
     def load_init_points(self):
         points_path = os.path.join(self.data_dir, self.scan, "exported/pcd.ply")
         # points_path = os.path.join(self.data_dir, self.scan, "exported/pcd_te_1_vs_0.01_jit.ply")
@@ -411,7 +412,7 @@ class ScannetFtDataset(BaseDataset):
 
     def read_depth(self, filepath):
         depth_im = cv2.imread(filepath, -1).astype(np.float32)
-        depth_im /= 1000
+        depth_im /= 1000 #
         depth_im[depth_im > 8.0] = 0
         depth_im[depth_im < 0.3] = 0
         return depth_im
@@ -435,7 +436,7 @@ class ScannetFtDataset(BaseDataset):
             cam_xy =  img_xy * depth
             cam_xyz = torch.cat([cam_xy, depth], dim=-1)
             cam_xyz = cam_xyz @ reverse_intrin
-            cam_xyz = cam_xyz[cam_xyz[...,2] > 0,:]
+            cam_xyz = cam_xyz[cam_xyz[...,2] > 0,:]#筛选深度>0的
             cam_xyz = torch.cat([cam_xyz, torch.ones_like(cam_xyz[...,:1])], dim=-1)
             world_xyz = (cam_xyz.view(-1,4) @ c2w.t())[...,:3]
             # print("cam_xyz", torch.min(cam_xyz, dim=-2)[0], torch.max(cam_xyz, dim=-2)[0])
@@ -464,6 +465,7 @@ class ScannetFtDataset(BaseDataset):
     def __del__(self):
         print("end loading")
 
+
     def normalize_rgb(self, data):
         # to unnormalize image for visualization
         # data C, H, W
@@ -472,10 +474,10 @@ class ScannetFtDataset(BaseDataset):
         std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
         return (data - mean) / std
 
-
+    #没看！！
     def get_init_item(self, idx, crop=False):
         sample = {}
-        init_view_num = self.opt.init_view_num
+        init_view_num = self.opt.init_view_num#3
         view_ids = self.view_id_list[idx]
         if self.split == 'train':
             view_ids = view_ids[:init_view_num]
@@ -569,9 +571,8 @@ class ScannetFtDataset(BaseDataset):
         item["camrotc2w"] = torch.from_numpy(camrot).float() # @ FLIP_Z
         item['lightpos'] = item["campos"]
 
-        dist = np.linalg.norm(campos)
-
-        middle = dist + 0.7
+        dist = np.linalg.norm(campos)#distance from (0,0,0)
+        middle = dist + 0.7#?
         item['middle'] = torch.FloatTensor([middle]).view(1, 1)
         item['far'] = torch.FloatTensor([self.near_far[1]]).view(1, 1)
         item['near'] = torch.FloatTensor([self.near_far[0]]).view(1, 1)
@@ -580,18 +581,18 @@ class ScannetFtDataset(BaseDataset):
         item['id'] = id
         item['vid'] = vid
         # bounding box
-        margin = self.opt.edge_filter
+        margin = self.opt.edge_filter# in defalu train ScanNet:10
         if full_img:
             item['images'] = img[None,...].clone()
         gt_image = np.transpose(img, (1, 2, 0))
         subsamplesize = self.opt.random_sample_size
-        if self.opt.random_sample == "patch":
-            indx = np.random.randint(margin, width - margin - subsamplesize + 1)
+        if self.opt.random_sample == "patch":#随机取一个patch，patch长宽为28*28
+            indx = np.random.randint(margin, width - margin - subsamplesize + 1)#左边沿margin，右边沿
             indy = np.random.randint(margin, height - margin - subsamplesize + 1)
             px, py = np.meshgrid(
                 np.arange(indx, indx + subsamplesize).astype(np.float32),
                 np.arange(indy, indy + subsamplesize).astype(np.float32))
-        elif self.opt.random_sample == "random":
+        elif self.opt.random_sample == "random":#嗯随机28*28个点
             px = np.random.randint(margin,
                                    width-margin,
                                    size=(subsamplesize,
@@ -611,7 +612,7 @@ class ScannetFtDataset(BaseDataset):
                                          subsamplesize)).astype(np.float32)
         elif self.opt.random_sample == "proportional_random":
             raise Exception("no gt_mask, no proportional_random !!!")
-        else:
+        else:#random_sample这项如果没有，全都训练
             px, py = np.meshgrid(
                 np.arange(margin, width - margin).astype(np.float32),
                 np.arange(margin, height- margin).astype(np.float32))
@@ -651,8 +652,7 @@ class ScannetFtDataset(BaseDataset):
                 item[key] = value.unsqueeze(0)
         return item
 
-
-
+    # 没看！！
     def get_dummyrot_item(self, idx, crop=False):
 
         item = {}
