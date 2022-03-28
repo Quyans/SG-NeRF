@@ -82,7 +82,7 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
             opt.visual_items.append('fine_raycolor')
 
     def run_network_models(self):
-        return self.fill_invalid(self.net_ray_marching(**self.input), self.input)
+        return self.fill_invalid(self.net_ray_marching(**self.input), self.input)#self.net_ray_marching(**self.input)在这训练了！！！！！！！！！！！！！！！！！！！！
 
     def fill_invalid(self, output, input):
         # ray_mask:             torch.Size([1, 1024])
@@ -218,7 +218,7 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
 
     def update_rank_ray_miss(self, total_steps):
         raise NotImplementedError
-
+# TODO: TOMORROW wo kan zhe ge
 class NeuralPointsRayMarching(nn.Module):
     def __init__(self,
              tonemap_func=None,

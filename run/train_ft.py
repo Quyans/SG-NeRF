@@ -263,7 +263,7 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=False, 
     height = dataset.height
     width = dataset.width
     visualizer.reset()
-    count = 0;
+    count = 0
     for i in range(0, total_num, opt.test_num_step): # 1 if test_steps == 10000 else opt.test_num_step
         data = dataset.get_item(i)
         raydir = data['raydir'].clone()
@@ -289,7 +289,6 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=False, 
             data['raydir'] = raydir[:, start:end, :]
             data["pixel_idx"] = pixel_idx[:, start:end, :]
             model.set_input(data)
-
             if opt.bgmodel.endswith("plane"):
                 img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, fg_masks, bg_ray_lst = bg_info
                 if len(bg_ray_lst) > 0:
@@ -354,7 +353,7 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=False, 
                 visualizer.print_details("{}:{}".format(key, visuals[key].shape))
                 visuals[key] = visuals[key].reshape(height, width, 3)
 
-
+        #到这肯定是算完了
         print("num.{} in {} cases: time used: {} s".format(i, total_num // opt.test_num_step, time.time() - stime), " at ", visualizer.image_dir)
         visualizer.display_current_results(visuals, i, opt=opt)
 
@@ -596,7 +595,7 @@ def main():
             fmt.END)
     visualizer = Visualizer(opt)
     train_dataset = create_dataset(opt) # In defalu scannet: /data/scannet_ft_dataset.py
-    normRw2c = train_dataset.norm_w2c[:3,:3] # torch.eye(3, device="cuda") #
+    normRw2c = train_dataset.norm_w2c[:3,:3] # torch.eye(3, device="cuda") # eye
     img_lst=None
     best_PSNR=0.0
     best_iter=0
@@ -616,7 +615,7 @@ def main():
                 epoch_count = 1
                 total_steps = 0
                 visualizer.print_details("No previous checkpoints, start from scratch!!!!")
-            else:
+            else:# go this way
                 opt.resume_iter = resume_iter
                 states = torch.load(
                     os.path.join(resume_dir, '{}_states.pth'.format(resume_iter)), map_location=cur_device)
@@ -627,22 +626,23 @@ def main():
                 best_PSNR = best_PSNR.item() if torch.is_tensor(best_PSNR) else best_PSNR
                 visualizer.print_details('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
                 visualizer.print_details('Continue training from {} epoch'.format(opt.resume_iter))
-                visualizer.print_details(f"Iter: {total_steps}")
+                visualizer.print_details(f"Iter: {total_steps}")#0
                 visualizer.print_details('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
                 del states
+            # 0 for both mvs and pointnerf, 1 for only mvs, 2 for only pointnerf；由于MVS-NeRF已经初始化好了，所以只做pointnerf部分
             opt.mode = 2
             opt.load_points=1
             opt.resume_dir=resume_dir
             opt.resume_iter = resume_iter
             opt.is_train=True
             model = create_model(opt)#In default train scannet:initialize /models/mvs_points_volumetric_model.py
-        elif opt.load_points < 1:
+        elif opt.load_points < 1:#无_net_ray_marching
             points_xyz_all, points_embedding_all, points_color_all, points_dir_all, points_conf_all, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst = gen_points_filter_embeddings(train_dataset, visualizer, opt)
             opt.resume_iter = opt.resume_iter if opt.resume_iter != "latest" else get_latest_epoch(opt.resume_dir)
             opt.is_train=True
             opt.mode = 2
             model = create_model(opt)
-        else:
+        else:#无_net_ray_marching
             load_points = opt.load_points
             opt.is_train = False
             opt.mode = 1
@@ -748,7 +748,7 @@ def main():
             model = create_model(opt)
         # None in default train scannet
         if points_xyz_all is not None:
-            if opt.bgmodel.startswith("planepoints"):
+            if opt.bgmodel.startswith("planepoints"):# bgmodel='no'
                 gen_pnts, gen_embedding, gen_dir, gen_color, gen_conf = train_dataset.get_plane_param_points()
                 visualizer.save_neural_points("pl", gen_pnts, gen_color, None, save_ref=False)
                 print("vis pl")
@@ -835,6 +835,8 @@ def main():
         for i, data in enumerate(data_loader):
             if opt.maximum_step is not None and total_steps >= opt.maximum_step:
                 break
+            #prune_iter = -1
+            #xiao dian ,zhang dian
             if opt.prune_iter > 0 and real_start != total_steps and total_steps % opt.prune_iter == 0 and total_steps < (opt.maximum_step - 1) and total_steps > 0 and total_steps <= opt.prune_max_iter:
                 with torch.no_grad():
                     model.clean_optimizer()
@@ -844,7 +846,7 @@ def main():
                     model.init_scheduler(total_steps, opt)
                     torch.cuda.empty_cache()
                     torch.cuda.synchronize()
-
+            # xiao dian ,zhang dian
             if opt.prob_freq > 0 and real_start != total_steps and total_steps % opt.prob_freq == 0 and total_steps < (opt.maximum_step - 1) and total_steps > 0:
                 if opt.prob_kernel_size is not None:
                     tier = np.sum(np.asarray(opt.prob_tiers) < total_steps)
@@ -857,7 +859,7 @@ def main():
                         prob_opt.name = opt.name
                         # if opt.prob_type=0:
                         train_dataset.opt.random_sample = "no_crop"
-                        if opt.prob_mode <= 0:
+                        if opt.prob_mode <= 0:#0
                             train_dataset.opt.random_sample_size = min(32, train_random_sample_size)
                             prob_dataset = train_dataset
                         elif opt.prob_mode == 1:

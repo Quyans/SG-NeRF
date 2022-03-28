@@ -54,7 +54,7 @@ def get_blender_raydir(pixelcoords, height, width, focal, rot, dir_norm):
 
 def get_dtu_raydir(pixelcoords, intrinsic, rot, dir_norm):
     # rot is c2w
-    ## pixelcoords: H x W x 2
+    ## pixelcoords: H x W x 2 (28*28*2),随机sample的坐标
     x = (pixelcoords[..., 0] + 0.5 - intrinsic[0, 2]) / intrinsic[0, 0]#x
     y = (pixelcoords[..., 1] + 0.5 - intrinsic[1, 2]) / intrinsic[1, 1]
     z = np.ones_like(x)

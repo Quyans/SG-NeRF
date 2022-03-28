@@ -245,6 +245,7 @@ class NeuralPoints(nn.Module):
             if saved_features is not None and "neural_points.xyz" in saved_features:
                 self.xyz = nn.Parameter(saved_features["neural_points.xyz"])
             else:
+
                 point_xyz, _ = load_blender_cloud(self.opt.cloud_path, self.opt.num_point)
                 point_xyz = torch.as_tensor(point_xyz, device=device, dtype=torch.float32)
                 if len(opt.point_noise) > 0:

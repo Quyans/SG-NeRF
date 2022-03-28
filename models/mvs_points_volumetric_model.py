@@ -17,7 +17,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
         super().__init__()
         self.optimizer, self.neural_point_optimizer, self.output, self.raygen_func, self.render_func, self.blend_func, self.coarse_raycolor, self.gt_image, self.input, self.l1loss, self.l2loss, self.tonemap_func, self.top_ray_miss_ids, self.top_ray_miss_loss, self.loss_ray_masked_coarse_raycolor, self.loss_ray_miss_coarse_raycolor, self.loss_total, self.loss_coarse_raycolor, self.loss_conf_coefficient = None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
 
-    #
+
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
         MvsPointsModel.modify_commandline_options(parser, is_train)
@@ -154,7 +154,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
 
     def setup(self, opt, train_len=None):
         super(MvsPointsVolumetricModel, self).setup(opt)
-        if opt.prob_freq > 0 and train_len is not None and opt.prob_num_step > 1:
+        if opt.prob_freq > 0 and train_len is not None and opt.prob_num_step > 1:#prob_freq:10000,prob_num_step:100
             self.num_probe = train_len // opt.prob_num_step
             self.reset_ray_miss_ranking()
         elif opt.prob_freq > 0 and train_len is not None and opt.prob_num_step == 1:
@@ -326,7 +326,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
             if isinstance(net, nn.DataParallel):
                 net = net.module
             net.load_state_dict(state_dict, strict=False)
-
+    #在这forward
     def test(self, gen_points=False):
         with torch.no_grad():
             if gen_points:

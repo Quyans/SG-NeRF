@@ -38,7 +38,7 @@ class BaseModel:
             self.schedulers = [
                 get_scheduler(optim, opt) for optim in self.optimizers
             ]
-        if not self.is_train or opt.resume_dir:
+        if not  self.is_train or opt.resume_dir:
             print("opt.resume_iter!!!!!!!!!", opt.resume_iter)
             self.load_networks(opt.resume_iter)
         self.print_networks(opt.verbose)

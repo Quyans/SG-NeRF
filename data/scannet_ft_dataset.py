@@ -546,7 +546,6 @@ class ScannetFtDataset(BaseDataset):
 
 
     def __getitem__(self, id, crop=False, full_img=False):
-
         item = {}
         vid = self.id_list[id]
         image_path = os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(vid))
@@ -556,7 +555,7 @@ class ScannetFtDataset(BaseDataset):
         img = self.transform(img)  # (4, h, w)
         c2w = np.loadtxt(os.path.join(self.data_dir, self.scan, "exported/pose", "{}.txt".format(vid))).astype(np.float32)
         # w2c = np.linalg.inv(c2w)
-        intrinsic = self.intrinsic
+        intrinsic = self.intrinsic#4*3
 
         # print("gt_image", gt_image.shape)
         width, height = img.shape[2], img.shape[1]
@@ -621,7 +620,7 @@ class ScannetFtDataset(BaseDataset):
         item["pixel_idx"] = pixelcoords
         # print("pixelcoords", pixelcoords.reshape(-1,2)[:10,:])
         raydir = get_dtu_raydir(pixelcoords, item["intrinsic"], camrot, self.opt.dir_norm > 0)
-        raydir = np.reshape(raydir, (-1, 3))
+        raydir = np.reshape(raydir, (-1, 3))#应当是一个[28*28,3]
         item['raydir'] = torch.from_numpy(raydir).float()
         gt_image = gt_image[py.astype(np.int32), px.astype(np.int32)]
         # gt_mask = gt_mask[py.astype(np.int32), px.astype(np.int32), :]
