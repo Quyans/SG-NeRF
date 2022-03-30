@@ -119,7 +119,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
 
 
     def forward(self):
-        if self.opt.mode != 2:
+        if self.opt.mode != 2:#False
             points_xyz, points_embedding, points_colors, points_dirs, points_conf = self.net_mvs(self.input)
             # print("volume_feature", volume_feature.shape)
             self.neural_points.set_points(points_xyz, points_embedding, points_color=points_colors, points_dir=points_dirs, points_conf=points_conf, parameter=self.opt.feedforward==0) # if feedforward, no neural points optimization
@@ -128,7 +128,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
             depth_gt = self.input["depths_h"][:,self.opt.trgt_id,...] if self.input["depths_h"].dim() > 3 else self.input["depths_h"]
             self.output["ray_depth_mask"] = depth_gt > 0
         self.set_visuals()
-        if not self.opt.no_loss:
+        if not self.opt.no_loss:#True
             self.compute_losses()
 
     def update_rank_ray_miss(self, total_steps):
@@ -323,7 +323,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
             if epoch=="best" and name == "ray_marching" and self.opt.default_conf > 0.0 and self.opt.default_conf <= 1.0 and self.neural_points.points_conf is not None:
                 assert "neural_points.points_conf" not in state_dict
                 state_dict["neural_points.points_conf"] = torch.ones_like(self.net_ray_marching.module.neural_points.points_conf) * self.opt.default_conf
-            if isinstance(net, nn.DataParallel):
+            if isinstance(net,  nn.DataParallel):
                 net = net.module
             net.load_state_dict(state_dict, strict=False)
     #在这forward

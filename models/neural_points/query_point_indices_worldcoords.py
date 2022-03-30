@@ -45,24 +45,19 @@ class lighting_fast_querier():
 
     def get_hyperparameters(self, vsize_np, point_xyz_w_tensor, ranges=None):
         '''
-        :param l:
-        :param h:
-        :param w:
-        :param zdim:
-        :param ydim:
-        :param xdim:
+        vsize_np:[0.008, 0.008, 0.008]
         :return:
         '''
         min_xyz, max_xyz = torch.min(point_xyz_w_tensor, dim=-2)[0][0], torch.max(point_xyz_w_tensor, dim=-2)[0][0]
-        vscale_np = np.array(self.opt.vscale, dtype=np.int32)
-        scaled_vsize_np = (vsize_np * vscale_np).astype(np.float32)
-        if ranges is not None:
+        vscale_np = np.array(self.opt.vscale, dtype=np.int32)#[2,2,2]
+        scaled_vsize_np = (vsize_np * vscale_np).astype(np.float32)#[0.008, 0.008, 0.008]
+        if ranges is not None:#not none :[-10.0, -10.0, -10.0, 10.0, 10.0, 10.0]
             # print("min_xyz", min_xyz.shape)
             # print("max_xyz", max_xyz.shape)
             # print("ranges", ranges)
             min_xyz, max_xyz = torch.max(torch.stack([min_xyz, torch.as_tensor(ranges[:3], dtype=torch.float32, device=min_xyz.device)], dim=0), dim=0)[0], torch.min(torch.stack([max_xyz, torch.as_tensor(ranges[3:], dtype=torch.float32,  device=min_xyz.device)], dim=0), dim=0)[0]
-        min_xyz = min_xyz - torch.as_tensor(scaled_vsize_np * self.opt.kernel_size / 2, device=min_xyz.device, dtype=torch.float32)
-        max_xyz = max_xyz + torch.as_tensor(scaled_vsize_np * self.opt.kernel_size / 2, device=min_xyz.device, dtype=torch.float32)
+        min_xyz = min_xyz - torch.as_tensor(scaled_vsize_np * self.opt.kernel_size / 2, device=min_xyz.device, dtype=torch.float32)#kernel_size[3,3,3]
+        max_xyz = max_xyz + torch.as_tensor(scaled_vsize_np * self.opt.kernel_size / 2, device=min_xyz.device, dtype=torch.float32)#kernel_size[3,3,3]
 
         ranges_np = torch.cat([min_xyz, max_xyz], dim=-1).cpu().numpy().astype(np.float32)
         # print("ranges_np",ranges_np)
@@ -84,7 +79,7 @@ class lighting_fast_querier():
         if self.opt.inverse > 0:
             raypos_tensor, _, _, _ = near_far_disparity_linear_ray_generation(cam_pos_tensor, ray_dirs_tensor, self.opt.z_depth_dim, near=near_depth, far=far_depth, jitter=0.3 if self.opt.is_train > 0 else 0.)
         else:
-            raypos_tensor, _, _, _ = near_far_linear_ray_generation(cam_pos_tensor, ray_dirs_tensor, self.opt.z_depth_dim, near=near_depth, far=far_depth, jitter=0.3 if self.opt.is_train > 0 else 0.)
+            raypos_tensor, _, _, _ = near_far_linear_ray_generation(cam_pos_tensor, ray_dirs_tensor, self.opt.z_depth_dim, near=near_depth, far=far_depth, jitter=0.3 if self.opt.is_train > 0 else 0.)#将28*28个像素坐标转化成了camera坐标系下的3D坐标
 
         sample_pidx_tensor, sample_loc_w_tensor, ray_mask_tensor = self.query_grid_point_index(h, w, pixel_idx_tensor, raypos_tensor, point_xyz_w_tensor, actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, self.opt.SR, self.opt.K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, self.opt.max_o, self.opt.P, radius_limit_np, depth_limit_np, range_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor, kMaxThreadsPerBlock=self.opt.gpu_maxthr)
 
@@ -539,8 +534,8 @@ class lighting_fast_querier():
 
     def build_occ_vox(self, point_xyz_w_tensor, actual_numpoints_tensor, B, N, P, max_o, scaled_vdim_np, kMaxThreadsPerBlock, gridSize, scaled_vsize_gpu, scaled_vdim_gpu, kernel_size_gpu, grid_size_vol, d_coord_shift):
         device = point_xyz_w_tensor.device
-        coor_occ_tensor = torch.zeros([B, scaled_vdim_np[0], scaled_vdim_np[1], scaled_vdim_np[2]], dtype=torch.int32, device=device)
-        occ_2_pnts_tensor = torch.full([B, max_o, P], -1, dtype=torch.int32, device=device)
+        coor_occ_tensor = torch.zeros([B, scaled_vdim_np[0], scaled_vdim_np[1], scaled_vdim_np[2]], dtype=torch.int32, device=device)#scaled_vdim_np:[B，344,377,357]
+        occ_2_pnts_tensor = torch.full([B, max_o, P], -1, dtype=torch.int32, device=device)#max_o:610000,P:2
         occ_2_coor_tensor = torch.full([B, max_o, 3], -1, dtype=torch.int32, device=device)
         occ_numpnts_tensor = torch.zeros([B, max_o], dtype=torch.int32, device=device)
         coor_2_occ_tensor = torch.full([B, scaled_vdim_np[0], scaled_vdim_np[1], scaled_vdim_np[2]], -1, dtype=torch.int32, device=device)
@@ -598,23 +593,38 @@ class lighting_fast_querier():
             np.uint64(seconds),
             block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1))
         # torch.cuda.synchronize()
-
+        '''
+        coor_occ_tensor:torch.Size([1, 344, 377, 357]) 
+        occ_2_coor_tensor:torch.Size([1, 610000, 3]) 
+        coor_2_occ_tensor:torch.Size([1, 344, 377, 357]) 
+        occ_idx_tensor:torch.Size([1]) 
+        occ_numpnts_tensor:torch.Size([1, 610000]) 
+        occ_2_pnts_tensor:torch.Size([1, 610000, 26])
+        '''
         return coor_occ_tensor, occ_2_coor_tensor, coor_2_occ_tensor, occ_idx_tensor, occ_numpnts_tensor, occ_2_pnts_tensor
 
 
     def query_grid_point_index(self, h, w, pixel_idx_tensor, raypos_tensor, point_xyz_w_tensor, actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, SR, K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, max_o, P, radius_limit_np, depth_limit_np, ranges_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor, kMaxThreadsPerBlock = 1024):
-
+        #h, w, pixel_idx_tensor, raypos_tensor, point_xyz_w_tensor, actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, self.opt.SR, self.opt.K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, self.opt.max_o, self.opt.P, radius_limit_np, depth_limit_np, range_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor, kMaxThreadsPerBlock=self.opt.gpu_maxthr
+        #scaled_vdim_np:[344,377,357]
+        #raypos_tensor[1,784,400,3]<---->将28*28个像素坐标转化成了camera坐标系下的3D坐标;28*28=784
         device = point_xyz_w_tensor.device
-        B, N = point_xyz_w_tensor.shape[0], point_xyz_w_tensor.shape[1]
+        B, N = point_xyz_w_tensor.shape[0], point_xyz_w_tensor.shape[1]#batch,n(num of point,4242266)
         pixel_size = scaled_vdim_np[0] * scaled_vdim_np[1]
-        grid_size_vol = pixel_size * scaled_vdim_np[2]
+        grid_size_vol = pixel_size * scaled_vdim_np[2]#总体素数量
         d_coord_shift = ranges_gpu[:3]
-        R, D = raypos_tensor.shape[1], raypos_tensor.shape[2]
+        R, D = raypos_tensor.shape[1], raypos_tensor.shape[2]#R:784个pixel;D:400-sample数量
         R = pixel_idx_tensor.reshape(B, -1, 2).shape[1]
         gridSize = int((B * N + kMaxThreadsPerBlock - 1) / kMaxThreadsPerBlock)
-
         coor_occ_tensor, occ_2_coor_tensor, coor_2_occ_tensor, occ_idx_tensor, occ_numpnts_tensor, occ_2_pnts_tensor = self.build_occ_vox(point_xyz_w_tensor, actual_numpoints_tensor, B, N, P, max_o, scaled_vdim_np, kMaxThreadsPerBlock, gridSize, scaled_vsize_gpu, scaled_vdim_gpu, query_size_gpu, grid_size_vol, d_coord_shift)
-
+        '''
+        coor_occ_tensor:torch.Size([1, 344, 377, 357]) 
+        occ_2_coor_tensor:torch.Size([1, 610000, 3]) 
+        coor_2_occ_tensor:torch.Size([1, 344, 377, 357]) 
+        occ_idx_tensor:torch.Size([1]) 
+        occ_numpnts_tensor:torch.Size([1, 610000]) 
+        occ_2_pnts_tensor:torch.Size([1, 610000, 26])
+        '''
         # torch.cuda.synchronize()
         # print("coor_occ_tensor", torch.min(coor_occ_tensor), torch.max(coor_occ_tensor), torch.min(occ_2_coor_tensor), torch.max(occ_2_coor_tensor), torch.min(coor_2_occ_tensor), torch.max(coor_2_occ_tensor), torch.min(occ_idx_tensor), torch.max(occ_idx_tensor), torch.min(occ_numpnts_tensor), torch.max(occ_numpnts_tensor), torch.min(occ_2_pnts_tensor), torch.max(occ_2_pnts_tensor), occ_2_pnts_tensor.shape)
         # print("occ_numpnts_tensor", torch.sum(occ_numpnts_tensor > 0), ranges_np)

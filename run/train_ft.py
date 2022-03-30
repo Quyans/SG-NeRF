@@ -615,7 +615,7 @@ def main():
                 epoch_count = 1
                 total_steps = 0
                 visualizer.print_details("No previous checkpoints, start from scratch!!!!")
-            else:# go this way
+            else:#True
                 opt.resume_iter = resume_iter
                 states = torch.load(
                     os.path.join(resume_dir, '{}_states.pth'.format(resume_iter)), map_location=cur_device)
@@ -927,11 +927,9 @@ def main():
                 else:
                     visualizer.print_details(
                         'nothing to probe, max ray miss is only {}'.format(model.top_ray_miss_loss[0]))
-
-
             total_steps += 1
             model.set_input(data)
-            if opt.bgmodel.endswith("plane"):
+            if opt.bgmodel.endswith("plane"):#False
                 if len(bg_ray_train_lst) > 0:
                     bg_ray_all = bg_ray_train_lst[data["id"]]
                     bg_idx = data["pixel_idx"].view(-1,2)
@@ -940,24 +938,19 @@ def main():
                     xyz_world_sect_plane = mvs_utils.gen_bg_points(model.input)
                     bg_ray, fg_masks = model.set_bg(xyz_world_sect_plane, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, fg_masks=fg_masks)
                 data["bg_ray"] = bg_ray
-            model.optimize_parameters(total_steps=total_steps)
-
-            losses = model.get_current_losses()
+            model.optimize_parameters(total_steps=total_steps) #
+            losses = model.get_current_losses()#{'total': tensor(0.0206, device='cuda:0', grad_fn=<AddBackward0>), 'ray_masked_coarse_raycolor': tensor(0.0213, device='cuda:0', grad_fn=<MseLossBackward>), 'ray_miss_coarse_raycolor': tensor(0., device='cuda:0'), 'coarse_raycolor': tensor(0.0213, device='cuda:0', grad_fn=<MseLossBackward>), 'conf_coefficient': tensor(-6.9088, device='cuda:0', grad_fn=<MeanBackward0>)}
             visualizer.accumulate_losses(losses)
-
             if opt.lr_policy.startswith("iter"):
                 model.update_learning_rate(opt=opt, total_steps=total_steps)
-
             if total_steps and total_steps % opt.print_freq == 0:
                 if opt.show_tensorboard:
                     visualizer.plot_current_losses_with_tb(total_steps, losses)
                 visualizer.print_losses(total_steps)
                 visualizer.reset()
-
             if hasattr(opt, "save_point_freq") and total_steps and total_steps % opt.save_point_freq == 0 and (opt.prune_iter > 0 and total_steps <= opt.prune_max_iter or opt.save_point_freq==1):
                 visualizer.save_neural_points(total_steps, model.neural_points.xyz, model.neural_points.points_embeding, data, save_ref=opt.load_points==0)
                 visualizer.print_details('saving neural points at total_steps {})'.format(total_steps))
-
             try:
                 if total_steps == 10000 or (total_steps % opt.save_iter_freq == 0 and total_steps > 0):
                     other_states = {
@@ -970,7 +963,6 @@ def main():
                     model.save_networks(total_steps, other_states)
             except Exception as e:
                 visualizer.print_details(e)
-
 
             if opt.vid > 0 and total_steps % opt.vid == 0 and total_steps > 0:
                 torch.cuda.empty_cache()

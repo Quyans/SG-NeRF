@@ -163,7 +163,7 @@ class BaseOptions:
         opt = self.gather_options()
         opt.is_train = self.is_train
 
-        if opt.timestamp:
+        if opt.timestamp:#False
             import datetime
             now = datetime.datetime.now().strftime('%y-%m-%d_%H:%M:%S')
             opt.name = opt.name + '_' + now

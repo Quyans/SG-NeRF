@@ -356,9 +356,10 @@ def near_far_linear_ray_generation(campos,
     # inputs
     # campos: N x 3
     # raydir: N x Rays x 3, must be normalized
+    # point_count:hyperparameter:z_depth_dim,400:Sammples
     # near: N x 1 x 1
     # far:  N x 1 x 1
-    # jitter: float in [0, 1), a fraction of step length
+    # jitter: float in [0, 1), a fraction of step length#0.3
     # outputs
     # raypos: N x Rays x Samples x 3
     # segment_length: N x Rays x Samples
@@ -367,23 +368,23 @@ def near_far_linear_ray_generation(campos,
     # print("campos", campos.shape)
     # print("raydir", raydir.shape)
     tvals = torch.linspace(0, 1, point_count + 1,
-                           device=campos.device).view(1, -1)
+                           device=campos.device).view(1, -1)#
     tvals = near * (1 - tvals) + far * tvals  # N x 1 x Sammples
     segment_length = (tvals[..., 1:] -
                       tvals[..., :-1]) * (1 + jitter * (torch.rand(
                           (raydir.shape[0], raydir.shape[1], point_count),
-                          device=campos.device) - 0.5))
+                          device=campos.device) - 0.5))# [...,1:]为了把第一个[0,0,0]元素除掉；[...,:-1]为了把最后一个去掉，这样就错位了
 
-    end_point_ts = torch.cumsum(segment_length, dim=2)
+    end_point_ts = torch.cumsum(segment_length, dim=2)#cumulative sum yi = x1+x2+...+xi
     end_point_ts = torch.cat([
         torch.zeros((end_point_ts.shape[0], end_point_ts.shape[1], 1),
                     device=end_point_ts.device), end_point_ts
     ],
-                             dim=2)
-    end_point_ts = near + end_point_ts
+                             dim=2)#把最开始的000000000拼回去
+    end_point_ts = near + end_point_ts#[n_batch,n_rays,n_sample+1]
 
-    middle_point_ts = (end_point_ts[:, :, :-1] + end_point_ts[:, :, 1:]) / 2
-    raypos = campos[:, None, None, :] + raydir[:, :, None, :] * middle_point_ts[:, :, :, None]
+    middle_point_ts = (end_point_ts[:, :, :-1] + end_point_ts[:, :, 1:]) / 2#[1,28*28,400]<->[n_batch,n_rays,n_sample+1]；沿着每个raydir（一共28*28个）,的4000个距离[距离原点、沿dir方向](标量)
+    raypos = campos[:, None, None, :] + raydir[:, :, None, :] * middle_point_ts[:, :, :, None]#转换为了相机坐标系下的坐标
     valid = torch.ones_like(middle_point_ts,
                             dtype=middle_point_ts.dtype,
                             device=middle_point_ts.device)

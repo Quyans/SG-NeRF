@@ -242,7 +242,7 @@ class NeuralPoints(nn.Module):
             saved_features = None
             if checkpoint:
                 saved_features = torch.load(checkpoint, map_location=device)
-            if saved_features is not None and "neural_points.xyz" in saved_features:
+            if saved_features is not None and "neural_points.xyz" in saved_features:#true
                 self.xyz = nn.Parameter(saved_features["neural_points.xyz"])
             else:
 
@@ -268,7 +268,7 @@ class NeuralPoints(nn.Module):
                 # print("max counts", torch.max(torch.unique(point_xyz, return_counts=True, dim=0)[1]))
                 print("point_xyz", point_xyz.shape)
 
-            self.xyz.requires_grad = opt.xyz_grad > 0
+            self.xyz.requires_grad = opt.xyz_grad > 0# no_grand
             shape = 1, self.xyz.shape[0], num_channels
             # filepath = "./aaaaaaaaaaaaa_cloud.txt"
             # np.savetxt(filepath, self.xyz.reshape(-1, 3).detach().cpu().numpy(), delimiter=";")
@@ -557,9 +557,18 @@ class NeuralPoints(nn.Module):
 
 
     def get_point_indices(self, inputs, cam_rot_tensor, cam_pos_tensor, pixel_idx_tensor, near_plane, far_plane, h, w, intrinsic, vox_query=False):
-
+        '''
+        cam_rot_tensor:[1,3,3]
+        cam_pos_tensor [1,3]
+        pixel_idx_tensor [1,28,28,2]
+        near_plane [1]
+        far_plane [1]
+        intrinsic [3,3]
+        '''
         point_xyz_pers_tensor = self.w2pers(self.xyz, cam_rot_tensor, cam_pos_tensor)
-        actual_numpoints_tensor = torch.ones([point_xyz_pers_tensor.shape[0]], device=point_xyz_pers_tensor.device, dtype=torch.int32) * point_xyz_pers_tensor.shape[1]
+
+        actual_numpoints_tensor = torch.ones([point_xyz_pers_tensor.shape[0]], device=point_xyz_pers_tensor.device, dtype=torch.int32) * point_xyz_pers_tensor.shape[1]#点云数量尔
+
         # print("pixel_idx_tensor", pixel_idx_tensor)
         # print("point_xyz_pers_tensor", point_xyz_pers_tensor.shape)
         # print("actual_numpoints_tensor", actual_numpoints_tensor.shape)
@@ -567,7 +576,6 @@ class NeuralPoints(nn.Module):
         ray_dirs_tensor = inputs["raydir"]
         # print("ray_dirs_tensor", ray_dirs_tensor.shape, self.xyz.shape)
         sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = self.querier.query_points(pixel_idx_tensor, point_xyz_pers_tensor, self.xyz[None,...], actual_numpoints_tensor, h, w, intrinsic, near_plane, far_plane, ray_dirs_tensor, cam_pos_tensor, cam_rot_tensor)
-
         # print("ray_mask_tensor",ray_mask_tensor.shape)
         # self.pers2img(point_xyz_pers_tensor, pixel_idx_tensor.cpu().numpy(), pixel_idx_cur_tensor.cpu().numpy(), ray_mask_tensor.cpu().numpy(), sample_pidx_tensor.cpu().numpy(), ranges, h, w, inputs)
 
@@ -606,8 +614,14 @@ class NeuralPoints(nn.Module):
 
 
     def w2pers(self, point_xyz, camrotc2w, campos):
-        point_xyz_shift = point_xyz[None, ...] - campos[:, None, :]
-        xyz = torch.sum(camrotc2w[:, None, :, :] * point_xyz_shift[:, :, :, None], dim=-2)
+        '''
+        point_xyz[4242263,3]
+        camrotc2w[1,3,3]
+        campos[1,3]
+        世界坐标系->相机坐标系
+        '''
+        point_xyz_shift = point_xyz[None, ...] - campos[:, None, :] #[1,4242263,3]
+        xyz = torch.sum(camrotc2w[:, None, :, :] * point_xyz_shift[:, :, :, None], dim=-2)#转到相机坐标系下xyz
         # print(xyz.shape, (point_xyz_shift[:, None, :] * camrot.T).shape)
         xper = xyz[:, :, 0] / xyz[:, :, 2]
         yper = xyz[:, :, 1] / xyz[:, :, 2]
