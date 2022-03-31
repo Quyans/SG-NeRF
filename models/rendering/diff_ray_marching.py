@@ -523,7 +523,7 @@ def ray_march(ray_dist,
     # blend_weight: N x Rays x Samples x 1
     # background_transmission: N x Rays x 1
 
-
+    # 体渲染
     point_color = render_func(ray_features)
 
     # we are essentially predicting predict 1 - e^-sigma

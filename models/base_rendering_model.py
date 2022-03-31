@@ -541,7 +541,7 @@ class BaseRenderingModel(BaseModel):
         opt = self.opt
         #color losses
         for i, name in enumerate(opt.color_loss_items):
-            if name.startswith("ray_masked"):#False
+            if name.startswith("ray_masked"):#有
                 unmasked_name = name[len("ray_masked")+1:]
                 masked_output = torch.masked_select(self.output[unmasked_name], (self.output["ray_mask"] > 0)[..., None].expand(-1, -1, 3)).reshape(1, -1, 3)
                 masked_gt = torch.masked_select(self.gt_image, (self.output["ray_mask"] > 0)[..., None].expand(-1, -1, 3)).reshape(1, -1, 3)
@@ -557,7 +557,7 @@ class BaseRenderingModel(BaseModel):
                     1, -1, 3)
                 masked_gt = torch.masked_select(self.gt_image,(self.output["ray_mask"] == 0)[..., None].expand(-1, -1, 3)).reshape(1, -1, 3)
 
-                if masked_output.shape[1] > 0:
+                if masked_output.shape[1] > 0:#False
                     loss = self.l2loss(masked_output, masked_gt) * masked_gt.shape[1]
                 else:
                     loss = torch.tensor(0.0, dtype=torch.float32, device=masked_output.device)

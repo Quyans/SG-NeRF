@@ -117,7 +117,7 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
         queried_shading_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["queried_shading"]
         output["queried_shading"] = queried_shading_tensor
 
-        if self.opt.prob == 1 and "ray_max_shading_opacity" in output:
+        if self.opt.prob == 1 and "ray_max_shading_opacity" in output:#False
             # print("ray_inds", ray_inds.shape, torch.sum(output["ray_mask"]))
             output = self.unmask(ray_inds, output, ["ray_max_sample_loc_w", "ray_max_shading_opacity", "shading_avg_color", "shading_avg_dir", "shading_avg_conf", "shading_avg_embedding", "ray_max_far_dist"], B, OR)
         return output
@@ -218,7 +218,6 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
 
     def update_rank_ray_miss(self, total_steps):
         raise NotImplementedError
-# TODO: TOMORROW wo kan zhe ge
 class NeuralPointsRayMarching(nn.Module):
     def __init__(self,
              tonemap_func=None,
@@ -264,9 +263,9 @@ class NeuralPointsRayMarching(nn.Module):
                 intrinsic=None,
                 **kargs):
         output = {}
-        # B, channel, 292, 24, 32;      B, 3, 294, 24, 32;     B, 294, 24;     B, 291, 2
+        # B, channel, 292, 24, 32 ;      B, 3, 294, 24, 32;     B, 294, 24;     B, 291, 2
         sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, ray_mask_tensor, vsize, grid_vox_sz = self.neural_points({"pixel_idx": pixel_idx, "camrotc2w": camrotc2w, "campos": campos, "near": near, "far": far,"focal": focal, "h": h, "w": w, "intrinsic": intrinsic,"gt_image":gt_image, "raydir":raydir})
-
+        #sampled_color[1,784,24,8,3];sampled_Rw2c[3,3];sampled_dir[1,784,24,8,3];sampled_conf[1,784,24,8,1]；sampled_embedding[1,784,24,8,32];sampled_xyz_pers[1,784,24,8,3];sampled_xyz[1,784,24,8,3];sample_pnt_mask[1,784,24,8];sample_loc[1,784,24,3];sample_loc_w[1,784,24,3];sample_ray_dirs[1,784,24,3];ray_mask_tensor[1,784];vsize=[0.0008,0.0008,0.0008]；grid_vox_sz = 0
         decoded_features, ray_valid, weight, conf_coefficient = self.aggregator(sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, grid_vox_sz)
         ray_dist = torch.cummax(sample_loc[..., 2], dim=-1)[0]
         ray_dist = torch.cat([ray_dist[..., 1:] - ray_dist[..., :-1], torch.full((ray_dist.shape[0], ray_dist.shape[1], 1), vsize[2], device=ray_dist.device)], dim=-1)
@@ -291,8 +290,8 @@ class NeuralPointsRayMarching(nn.Module):
         # background_transmission: N x Rays x 1
         # ray march
         output["queried_shading"] = torch.logical_not(torch.any(ray_valid, dim=-1, keepdims=True)).repeat(1, 1, 3).to(torch.float32)
-        if self.return_color:
-            if "bg_ray" in kargs:
+        if self.return_color:#True
+            if "bg_ray" in kargs:#ray_color[1,784,3];point_color[1,784,24,3];opacity[1,784,24];acc_transmission[1,784,24];blend_weight[1,784,24,1];background_transmission[1,784,1]
                 bg_color = None
             (
                 ray_color,
@@ -328,7 +327,7 @@ class NeuralPointsRayMarching(nn.Module):
             output["conf_coefficient"] = conf_coefficient
 
 
-        if self.opt.prob == 1 and output["coarse_point_opacity"].shape[1] > 0 :
+        if self.opt.prob == 1 and output["coarse_point_opacity"].shape[1] > 0 :#False
             B, OR, _, _ = sample_pnt_mask.shape
             if weight is not None:
                 output["ray_max_shading_opacity"], opacity_ind = torch.max(output["coarse_point_opacity"], dim=-1, keepdim=True)

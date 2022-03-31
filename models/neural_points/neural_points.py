@@ -566,21 +566,21 @@ class NeuralPoints(nn.Module):
         intrinsic [3,3]
         '''
         point_xyz_pers_tensor = self.w2pers(self.xyz, cam_rot_tensor, cam_pos_tensor)
-
+        #[1,4242263,3]该场景中的所有点云
         actual_numpoints_tensor = torch.ones([point_xyz_pers_tensor.shape[0]], device=point_xyz_pers_tensor.device, dtype=torch.int32) * point_xyz_pers_tensor.shape[1]#点云数量尔
-
+        #int ,[4242263]
         # print("pixel_idx_tensor", pixel_idx_tensor)
         # print("point_xyz_pers_tensor", point_xyz_pers_tensor.shape)
         # print("actual_numpoints_tensor", actual_numpoints_tensor.shape)
         # sample_pidx_tensor: B, R, SR, K
         ray_dirs_tensor = inputs["raydir"]
+        # (1,784,3)-784个采样点
         # print("ray_dirs_tensor", ray_dirs_tensor.shape, self.xyz.shape)
         sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = self.querier.query_points(pixel_idx_tensor, point_xyz_pers_tensor, self.xyz[None,...], actual_numpoints_tensor, h, w, intrinsic, near_plane, far_plane, ray_dirs_tensor, cam_pos_tensor, cam_rot_tensor)
-        # print("ray_mask_tensor",ray_mask_tensor.shape)
-        # self.pers2img(point_xyz_pers_tensor, pixel_idx_tensor.cpu().numpy(), pixel_idx_cur_tensor.cpu().numpy(), ray_mask_tensor.cpu().numpy(), sample_pidx_tensor.cpu().numpy(), ranges, h, w, inputs)
-
+        # sample_pidx_tensor[1,784,24,8];sample_loc_tensor[1,784,24,3];sample_loc_w_tensor[1,784,24,3];sample_ray_dirs_tensor[1,784,24,3];ray_mask_tensor[1,784]
+        #loc_w ? whats meaning
         B, _, SR, K = sample_pidx_tensor.shape
-        if vox_query:
+        if vox_query:#False
             if sample_pidx_tensor.shape[1] > 0:
                 sample_pidx_tensor = self.query_vox_grid(sample_loc_w_tensor, self.full_grid_idx, self.space_min, self.grid_vox_sz)
             else:
@@ -720,20 +720,20 @@ class NeuralPoints(nn.Module):
         # 1, 294, 24, 32;   1, 294, 24;     1, 291, 2
 
         sample_pidx, sample_loc, ray_mask_tensor, point_xyz_pers_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, vsize = self.get_point_indices(inputs, camrotc2w, campos, pixel_idx, torch.min(near_plane).cpu().numpy(), torch.max(far_plane).cpu().numpy(), torch.max(h).cpu().numpy(), torch.max(w).cpu().numpy(), intrinsic.cpu().numpy()[0], vox_query=self.opt.NN<0)
-
+        #sample_pidx[1,784,24,8];sample_loc[1,784,24,3];ray_mask_tensor[1,784]，all=1;point_xyz_pers_tensor[1,4242263,3];sample_loc_w_tensor[1,784,24,3];sample_ray_dirs_tensor[1,784,24,3]vsize:value=[0.008,0.008，0.008]
         sample_pnt_mask = sample_pidx >= 0
-        B, R, SR, K = sample_pidx.shape
-        sample_pidx = torch.clamp(sample_pidx, min=0).view(-1).long()
+        B, R, SR, K = sample_pidx.shape#B：batch，R：sampled_pixel;SR:? K: ?
+        sample_pidx = torch.clamp(sample_pidx, min=0).view(-1).long()#sample_pidx = 150528
         sampled_embedding = torch.index_select(torch.cat([self.xyz[None, ...], point_xyz_pers_tensor, self.points_embeding], dim=-1), 1, sample_pidx).view(B, R, SR, K, self.points_embeding.shape[2]+self.xyz.shape[1]*2)
-
+        #[1,784,24,8,38]
         sampled_color = None if self.points_color is None else torch.index_select(self.points_color, 1, sample_pidx).view(B, R, SR, K, self.points_color.shape[2])
-
+        # [1,784,24,8,3]
         sampled_dir = None if self.points_dir is None else torch.index_select(self.points_dir, 1, sample_pidx).view(B, R, SR, K, self.points_dir.shape[2])
-
+        # [1,784,24,8,3]
         sampled_conf = None if self.points_conf is None else torch.index_select(self.points_conf, 1, sample_pidx).view(B, R, SR, K, self.points_conf.shape[2])
-
+        # [1,784,24,8,1]感觉基本上全是1
         sampled_Rw2c = self.Rw2c if self.Rw2c.dim() == 2 else torch.index_select(self.Rw2c, 0, sample_pidx).view(B, R, SR, K, self.Rw2c.shape[1], self.Rw2c.shape[2])
-
+        #[3,3]-ones(3,3)
         # filepath = "./sampled_xyz_full.txt"
         # np.savetxt(filepath, self.xyz.reshape(-1, 3).detach().cpu().numpy(), delimiter=";")
         #
