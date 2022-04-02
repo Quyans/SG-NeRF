@@ -241,7 +241,7 @@ class lighting_fast_querier():
                     const int max_o,
                     int* occ_idx, // B, all 0
                     int *coor_2_occ,  // B * 400 * 400 * 400, all -1
-                    int *occ_2_coor,  // B * max_o * 3, all -1
+                    int *occ_2_coor,  // B * max_o * 3, all -1 
                     unsigned long seconds
                 ) {
                     int index = blockIdx.x * blockDim.x + threadIdx.x; // index of gpu thread
@@ -251,6 +251,7 @@ class lighting_fast_querier():
                     if (i_pt < in_actual_numpoints[i_batch]) {
                         int coor[3];
                         const float *p_pt = in_data + index * 3;
+                        //d_voxel_size:voxel格子的大小,scannet取的0.016
                         coor[0] = (int) floor((p_pt[0] - d_coord_shift[0]) / d_voxel_size[0]);
                         coor[1] = (int) floor((p_pt[1] - d_coord_shift[1]) / d_voxel_size[1]);
                         coor[2] = (int) floor((p_pt[2] - d_coord_shift[2]) / d_voxel_size[2]);
@@ -608,6 +609,9 @@ class lighting_fast_querier():
         #h, w, pixel_idx_tensor, raypos_tensor, point_xyz_w_tensor, actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, self.opt.SR, self.opt.K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, self.opt.max_o, self.opt.P, radius_limit_np, depth_limit_np, range_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor, kMaxThreadsPerBlock=self.opt.gpu_maxthr
         #scaled_vdim_np:[344,377,357]
         #raypos_tensor[1,784,400,3]<---->将28*28个像素坐标转化成了camera坐标系下的3D坐标;28*28=784
+        #scaled_vsize_gpu[3]:volume的size
+        #scaled_vdim_gpu[3]:volumn的维度
+        #d_coord_shift：体素场的中心点（体素场的坐标全为正数，相当于是range[:3]的坐标）
         device = point_xyz_w_tensor.device
         B, N = point_xyz_w_tensor.shape[0], point_xyz_w_tensor.shape[1]#batch,n(num of point,4242266)
         pixel_size = scaled_vdim_np[0] * scaled_vdim_np[1]
