@@ -576,16 +576,29 @@ class NeuralPoints(nn.Module):
         ray_dirs_tensor = inputs["raydir"]
         # (1,784,3)-784个采样点
         # print("ray_dirs_tensor", ray_dirs_tensor.shape, self.xyz.shape)
+        #sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
+        #sample_loc_tensor->self.w2pers(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor) sample_loc_w_tensor转了坐标系
+        #sample_loc_w_tensor[1,784,24,3],init:all-0，存某个pixel需要query的点的坐标
+        #sample_ray_dirs_tensor[1,784,24,3]方向？
+        #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
+        #vsize_np[0.008 0.008 0.008]
+        #ranges_np[-1.6265 -1.9573 -3.2914 3.868 4.070 2.417]
         sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = self.querier.query_points(pixel_idx_tensor, point_xyz_pers_tensor, self.xyz[None,...], actual_numpoints_tensor, h, w, intrinsic, near_plane, far_plane, ray_dirs_tensor, cam_pos_tensor, cam_rot_tensor)
         # sample_pidx_tensor[1,784,24,8];sample_loc_tensor[1,784,24,3];sample_loc_w_tensor[1,784,24,3];sample_ray_dirs_tensor[1,784,24,3];ray_mask_tensor[1,784]
         #loc_w ? whats meaning
-        B, _, SR, K = sample_pidx_tensor.shape
+        B, _, SR, K = sample_pidx_tensor.shape#B1 SR24 K 8
         if vox_query:#False
             if sample_pidx_tensor.shape[1] > 0:
                 sample_pidx_tensor = self.query_vox_grid(sample_loc_w_tensor, self.full_grid_idx, self.space_min, self.grid_vox_sz)
             else:
                 sample_pidx_tensor = torch.zeros([B, 0, SR, 8], device=sample_pidx_tensor.device, dtype=sample_pidx_tensor.dtype)
-
+        # sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
+        # sample_loc_tensor[1,784,24,3]存某个pixel需要query的点的坐标，换坐标系了，应该从世界坐标系转到了pers（相机坐标系？）
+        #ray_mask_tensor[1,784] ray_mask,true or false，存放不需要采集的像素的msk
+        #point_xyz_pers_tensor[1,4242263,3]input点云
+        #sample_loc_w_tensor[1,784,24,3]存某个pixel需要query的点的坐标(应该是世界坐标系的）
+        # sample_ray_dirs_tensor[1,784,24,3]存dir,24个点的3d方向向量相同
+        #vsize：voxel size [0.008 0.008 0.008]
         return sample_pidx_tensor, sample_loc_tensor, ray_mask_tensor, point_xyz_pers_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, vsize
 
 
@@ -718,20 +731,26 @@ class NeuralPoints(nn.Module):
 
         pixel_idx, camrotc2w, campos, near_plane, far_plane, h, w, intrinsic = inputs["pixel_idx"].to(torch.int32), inputs["camrotc2w"], inputs["campos"], inputs["near"], inputs["far"], inputs["h"], inputs["w"], inputs["intrinsic"]
         # 1, 294, 24, 32;   1, 294, 24;     1, 291, 2
-
+        # sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
+        # sample_loc_tensor[1,784,24,3]存某个pixel需要query的点的坐标，换坐标系了，应该从世界坐标系转到了pers（相机坐标系？）
+        #ray_mask_tensor[1,784] ray_mask,true or false，存放不需要采集的像素的msk
+        #point_xyz_pers_tensor[1,4242263,3]input点云
+        #sample_loc_w_tensor[1,784,24,3]存某个pixel需要query的点的坐标(应该是世界坐标系的）
+        # sample_ray_dirs_tensor[1,784,24,3]存dir,24个点的3d方向向量相同
+        #vsize：voxel size [0.008 0.008 0.008]
         sample_pidx, sample_loc, ray_mask_tensor, point_xyz_pers_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, vsize = self.get_point_indices(inputs, camrotc2w, campos, pixel_idx, torch.min(near_plane).cpu().numpy(), torch.max(far_plane).cpu().numpy(), torch.max(h).cpu().numpy(), torch.max(w).cpu().numpy(), intrinsic.cpu().numpy()[0], vox_query=self.opt.NN<0)
-        #sample_pidx[1,784,24,8];sample_loc[1,784,24,3];ray_mask_tensor[1,784]，all=1;point_xyz_pers_tensor[1,4242263,3];sample_loc_w_tensor[1,784,24,3];sample_ray_dirs_tensor[1,784,24,3]vsize:value=[0.008,0.008，0.008]
-        sample_pnt_mask = sample_pidx >= 0
-        B, R, SR, K = sample_pidx.shape#B：batch，R：sampled_pixel;SR:? K: ?
+
+        sample_pnt_mask = sample_pidx >= 0#[1,784,24,8]，colmap点云的msk
+        B, R, SR, K = sample_pidx.shape#B：batch，R：sampled_pixel;SR:24一个ray最多query的点 K: 8一个query点的max num neighbour
         sample_pidx = torch.clamp(sample_pidx, min=0).view(-1).long()#sample_pidx = 150528
         sampled_embedding = torch.index_select(torch.cat([self.xyz[None, ...], point_xyz_pers_tensor, self.points_embeding], dim=-1), 1, sample_pidx).view(B, R, SR, K, self.points_embeding.shape[2]+self.xyz.shape[1]*2)
-        #[1,784,24,8,38]
+        #[1,784,24,8,38]，cat了[3,3,32],suppose:xyz世界坐标，xyz_pers场景坐标；所有点的信息
         sampled_color = None if self.points_color is None else torch.index_select(self.points_color, 1, sample_pidx).view(B, R, SR, K, self.points_color.shape[2])
         # [1,784,24,8,3]
         sampled_dir = None if self.points_dir is None else torch.index_select(self.points_dir, 1, sample_pidx).view(B, R, SR, K, self.points_dir.shape[2])
         # [1,784,24,8,3]
         sampled_conf = None if self.points_conf is None else torch.index_select(self.points_conf, 1, sample_pidx).view(B, R, SR, K, self.points_conf.shape[2])
-        # [1,784,24,8,1]感觉基本上全是1
+        # [1,784,24,8,1]基本上全是1
         sampled_Rw2c = self.Rw2c if self.Rw2c.dim() == 2 else torch.index_select(self.Rw2c, 0, sample_pidx).view(B, R, SR, K, self.Rw2c.shape[1], self.Rw2c.shape[2])
         #[3,3]-ones(3,3)
         # filepath = "./sampled_xyz_full.txt"

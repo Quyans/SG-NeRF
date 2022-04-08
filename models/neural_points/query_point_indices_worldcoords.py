@@ -79,12 +79,20 @@ class lighting_fast_querier():
         if self.opt.inverse > 0:
             raypos_tensor, _, _, _ = near_far_disparity_linear_ray_generation(cam_pos_tensor, ray_dirs_tensor, self.opt.z_depth_dim, near=near_depth, far=far_depth, jitter=0.3 if self.opt.is_train > 0 else 0.)
         else:
+            # raypos_tensor[1,784,400,3]->世界坐标系下的，需要采样的点的坐标
             raypos_tensor, _, _, _ = near_far_linear_ray_generation(cam_pos_tensor, ray_dirs_tensor, self.opt.z_depth_dim, near=near_depth, far=far_depth, jitter=0.3 if self.opt.is_train > 0 else 0.)#将28*28个像素坐标转化成了camera坐标系下的3D坐标
-            #raypos_tensor[1,784,400,3]->世界坐标系下的，需要采样的点的坐标
+        #sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
+        #sample_loc_w_tensor[1,784,24,3],init:all-0，存某个pixel需要query的点的坐标
+        #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
         sample_pidx_tensor, sample_loc_w_tensor, ray_mask_tensor = self.query_grid_point_index(h, w, pixel_idx_tensor, raypos_tensor, point_xyz_w_tensor, actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, self.opt.SR, self.opt.K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, self.opt.max_o, self.opt.P, radius_limit_np, depth_limit_np, range_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor, kMaxThreadsPerBlock=self.opt.gpu_maxthr)
-        #sample_pidx_tensor:[1,784,24,8];sample_loc_w_tensor[1,784,24,3];ray_mask_tensor[1,784]
         sample_ray_dirs_tensor = torch.masked_select(ray_dirs_tensor, ray_mask_tensor[..., None]>0).reshape(ray_dirs_tensor.shape[0],-1,3)[...,None,:].expand(-1, -1, self.opt.SR, -1).contiguous()
-        # sample_ray_dirs_tensor[1,784,24,3]
+        #sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
+        #elf.w2pers(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor) sample_loc_w_tensor转了坐标系
+        #sample_loc_w_tensor[1,784,24,3],init:all-0，存某个pixel需要query的点的坐标
+        #sample_ray_dirs_tensor[1,784,24,3]方向？
+        #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
+        #vsize_np[0.008 0.008 0.008]
+        #ranges_np[-1.6265 -1.9573 -3.2914 3.868 4.070 2.417]
         return sample_pidx_tensor, self.w2pers(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor), sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize_np, ranges_np
 
 
@@ -230,18 +238,18 @@ class lighting_fast_querier():
     
             extern "C" {
                 __global__ void claim_occ(
-                    const float* in_data,   // B * N * 3
-                    const int* in_actual_numpoints, // B 
-                    const int B,
-                    const int N,
-                    const float *d_coord_shift,     // 3
-                    const float *d_voxel_size,      // 3
-                    const int *d_grid_size,       // 3
-                    const int grid_size_vol,
-                    const int max_o,
-                    int* occ_idx, // B, all 0
-                    int *coor_2_occ,  // B * 400 * 400 * 400, all -1
-                    int *occ_2_coor,  // B * max_o * 3, all -1 
+                    const float* in_data,   // B * N * 3 #[1,4242263,3],点云input数据
+                    const int* in_actual_numpoints, // B #value = 4242263
+                    const int B,//1
+                    const int N,//4244263
+                    const float *d_coord_shift,     // 3#[3],values = [-1.6265191,-1.9573721,-3.291426]取的是整个boudingbox的三个最小值，作为体素场的原点，即体素场坐标皆为正数
+                    const float *d_voxel_size,      // 3#[3],values = [0.016,0.016,0.016]:单个voxel的size
+                    const int *d_grid_size,       // 3#[3],values = [344,377,357]:voxel‘s dim for every axises
+                    const int grid_size_vol,    //#46298616 = 344*377*357 整个的voxel的数量
+                    const int max_o, //#一次性取的最多的voxel数量
+                    int* occ_idx, // B, all 0 , 
+                    int *coor_2_occ,  // B * 400 * 400 * 400, all -1#outputs,[1,344,377,357]初始值都是-1,如果遍历到某一voxel变成0
+                    int *occ_2_coor,  // B * max_o * 3, all -1 #outputs,[1,610000,3]遍历到的体素场的坐标
                     unsigned long seconds
                 ) {
                     int index = blockIdx.x * blockDim.x + threadIdx.x; // index of gpu thread
@@ -259,21 +267,21 @@ class lighting_fast_querier():
                         if (coor[0] < 0 || coor[0] >= d_grid_size[0] || coor[1] < 0 || coor[1] >= d_grid_size[1] || coor[2] < 0 || coor[2] >= d_grid_size[2]) { return; }
                         int coor_indx_b = i_batch * grid_size_vol + coor[0] * (d_grid_size[1] * d_grid_size[2]) + coor[1] * d_grid_size[2] + coor[2];
                         
-                        int voxel_idx = coor_2_occ[coor_indx_b];
+                        int voxel_idx = coor_2_occ[coor_indx_b];//被占用的voxel value from -1 to 0
                         if (voxel_idx == -1) {  // found an empty voxel
                             int old_voxel_num = atomicCAS(
                                     &coor_2_occ[coor_indx_b],
                                     -1, 0
                             );
                             if (old_voxel_num == -1) {
-                                // CAS -> old val, if old val is -1
+                                // CAS -> old val, if old val is -1//如果之前是空的，证明该线程抢占到了这个voxel，只有这个线程可以做counter+1操作
                                 // if we get -1, this thread is the one who obtain a new voxel
                                 // so only this thread should do the increase operator below
-                                int tmp = atomicAdd(occ_idx+i_batch, 1); // increase the counter, return old counter
-                                 // increase the counter, return old counter
+                                int tmp = atomicAdd(occ_idx+i_batch, 1); // increase the counter, return old counter；occ_idx：目前已经处理的体素个数
+                                 // increase the counter, return old counter,max_o：一次处理体素的上限
                                 if (tmp < max_o) {
                                     int coord_inds = (i_batch * max_o + tmp) * 3;
-                                    occ_2_coor[coord_inds] = coor[0];
+                                    occ_2_coor[coord_inds] = coor[0];//记录要处理的体素的坐标
                                     occ_2_coor[coord_inds + 1] = coor[1];
                                     occ_2_coor[coord_inds + 2] = coor[2];
                                 } else {
@@ -291,24 +299,24 @@ class lighting_fast_querier():
                         }
                     }
                 }
-                
+                //对每一个体素场坐标，查看kernel_size内所有体素激活（coor_occ即置1，否则是0）,这些都是我们后面要搞的体素
                 __global__ void map_coor2occ(
-                    const int B,
-                    const int *d_grid_size,       // 3
-                    const int *kernel_size,       // 3
-                    const int grid_size_vol,
-                    const int max_o,
-                    int* occ_idx, // B, all -1
-                    int *coor_occ,  // B * 400 * 400 * 400
-                    int *coor_2_occ,  // B * 400 * 400 * 400
-                    int *occ_2_coor  // B * max_o * 3
+                    const int B, //1
+                    const int *d_grid_size,       // 3 [3],values = [344 377 357]
+                    const int *kernel_size,       // 3 [3],values = [3 3 3]
+                    const int grid_size_vol,      // #46298616 = 344*377*357 整个的voxel的数量
+                    const int max_o,                //#一次性取的最多的voxel数量
+                    int* occ_idx, // B, all -1 #[1]初始值为遍历到的点云idx
+                    int *coor_occ,  // B * 400 * 400 * 400 #[1,344,377,357]初始时皆为0
+                    int *coor_2_occ,  // B * 400 * 400 * 400#[1,344,377,357]初始时皆为-1；存index？
+                    int *occ_2_coor  // B * max_o * 3 #[1,610000,3]体素场坐标
                 ) {
                     int index = blockIdx.x * blockDim.x + threadIdx.x; // index of gpu thread
                     int i_batch = index / max_o;  // index of batch
                     if (i_batch >= B) { return; }
                     int i_pt = index - max_o * i_batch;
                     if (i_pt < occ_idx[i_batch] && i_pt < max_o) {
-                        int coor[3];
+                        int coor[3];//取出体素场坐标放入其中
                         coor[0] = occ_2_coor[index*3];
                         if (coor[0] < 0) { return; }
                         coor[1] = occ_2_coor[index*3+1];
@@ -330,19 +338,19 @@ class lighting_fast_querier():
                 }
                 
                 __global__ void fill_occ2pnts(
-                    const float* in_data,   // B * N * 3
+                    const float* in_data,   // B * N * 3#[1,4242263,3],点云input数据
                     const int* in_actual_numpoints, // B 
-                    const int B,
-                    const int N,
-                    const int P,
-                    const float *d_coord_shift,     // 3
-                    const float *d_voxel_size,      // 3
-                    const int *d_grid_size,       // 3
-                    const int grid_size_vol,
-                    const int max_o,
-                    int *coor_2_occ,  // B * 400 * 400 * 400, all -1
-                    int *occ_2_pnts,  // B * max_o * P, all -1
-                    int *occ_numpnts,  // B * max_o, all 0
+                    const int B,//1
+                    const int N,//4242263
+                    const int P,// 26 超参
+                    const float *d_coord_shift,     // 3#[-1.6265,-1.9573,-3.2914]
+                    const float *d_voxel_size,      // 3#[0.0016 0.0016 0.0016]
+                    const int *d_grid_size,       // 3# [344 377 357]
+                    const int grid_size_vol,// 46298616 = 344*377*357
+                    const int max_o,//# 610000
+                    int *coor_2_occ,  // B * 400 * 400 * 400, all -1#[1,344,377,357]初始时皆为-1；存index的值
+                    int *occ_2_pnts,  // B * max_o * P, all -1#[1,610000,26]未曾出现过，初始化皆为-1
+                    int *occ_numpnts,  // B * max_o, all 0 #[1,610000]未曾出现过，初始化皆为 0 
                     unsigned long seconds
                 ) {
                     int index = blockIdx.x * blockDim.x + threadIdx.x; // index of gpu thread
@@ -352,7 +360,7 @@ class lighting_fast_querier():
                     if (i_pt < in_actual_numpoints[i_batch]) {
                         int coor[3];
                         const float *p_pt = in_data + index * 3;
-                        coor[0] = (int) floor((p_pt[0] - d_coord_shift[0]) / d_voxel_size[0]);
+                        coor[0] = (int) floor((p_pt[0] - d_coord_shift[0]) / d_voxel_size[0]);//计算点云所在的体素场坐标
                         coor[1] = (int) floor((p_pt[1] - d_coord_shift[1]) / d_voxel_size[1]);
                         coor[2] = (int) floor((p_pt[2] - d_coord_shift[2]) / d_voxel_size[2]);
                         if (coor[0] < 0 || coor[0] >= d_grid_size[0] || coor[1] < 0 || coor[1] >= d_grid_size[1] || coor[2] < 0 || coor[2] >= d_grid_size[2]) { return; }
@@ -378,16 +386,16 @@ class lighting_fast_querier():
                 
                             
                 __global__ void mask_raypos(
-                    float *raypos,    // [B, 2048, 400, 3]
-                    int *coor_occ,    // B * 400 * 400 * 400
-                    const int B,       // 3
-                    const int R,       // 3
-                    const int D,       // 3
-                    const int grid_size_vol,
-                    const float *d_coord_shift,     // 3
-                    const int *d_grid_size,       // 3
-                    const float *d_voxel_size,      // 3
-                    int *raypos_mask    // B, R, D
+                    float *raypos,    // # [1, 784, 400, 3]要query的点的世界坐标
+                    int *coor_occ,    // # [1, 344, 377, 357]算是一个mask 1 or 0，这个体素场如果在kernelsize范围内，则1, else 0
+                    const int B,       // # 1
+                    const int R,       // 784
+                    const int D,       // # 400
+                    const int grid_size_vol,//# 46298616
+                    const float *d_coord_shift,     // # [-1.6265191, -1.9573721 -3.291426]
+                    const int *d_grid_size,       // #[344 377 357]
+                    const float *d_voxel_size,      // # [0.016 0.016 0.016]
+                    int *raypos_mask    // #[1,784,400];all 0 init
                 ) {
                     int index = blockIdx.x * blockDim.x + threadIdx.x; // index of gpu thread
                     int i_batch = index / (R * D);  // index of batch
@@ -405,21 +413,21 @@ class lighting_fast_querier():
                 
         
                 __global__ void get_shadingloc(
-                    const float *raypos,    // [B, 2048, 400, 3]
-                    const int *raypos_mask,    // B, R, D
-                    const int B,       // 3
-                    const int R,       // 3
-                    const int D,       // 3
-                    const int SR,       // 3
-                    float *sample_loc,       // B * R * SR * 3
-                    int *sample_loc_mask       // B * R * SR
+                    const float *raypos,    // # [1, 784, 400, 3]要采样要query的点的世界坐标
+                    const int *raypos_mask,    // #[1,784,400],沿光线这是第几个被采样的点-1 -1 0 1 -1 -1 1 2 3 4 5 -1 -1 -1 ...
+                    const int B,       // 1
+                    const int R,       // 784
+                    const int D,       // 400
+                    const int SR,       // 24 一条ray一次性最多采样的点数
+                    float *sample_loc,       // #[1,784,24,3],init:all-0，存某个pixel需要采样的点的坐标
+                    int *sample_loc_mask       // [1,784,24],init:all-0 sample_loc的msk
                 ) {
                     int index = blockIdx.x * blockDim.x + threadIdx.x; // index of gpu thread
                     int i_batch = index / (R * D);  // index of batch
                     if (i_batch >= B) { return; }
-                    int temp = raypos_mask[index];
+                    int temp = raypos_mask[index]; // temp：mask的值，raypos_mask：#[1,784,400],沿光线这是第几个被采样的点-1 -1 0 1 -1 -1 1 2 3 4 5 -1 -1 -1 ...
                     if (temp >= 0) {
-                        int r = (index - i_batch * R * D) / D;
+                        int r = (index - i_batch * R * D) / D; // deside which ray(0~783)
                         int loc_inds = i_batch * R * SR + r * SR + temp;
                         sample_loc[loc_inds * 3] = raypos[index * 3];
                         sample_loc[loc_inds * 3 + 1] = raypos[index * 3 + 1];
@@ -430,25 +438,25 @@ class lighting_fast_querier():
                 
                 
                 __global__ void query_neigh_along_ray_layered(
-                    const float* in_data,   // B * N * 3
-                    const int B,
-                    const int SR,               // num. samples along each ray e.g., 128
-                    const int R,               // e.g., 1024
-                    const int max_o,
-                    const int P,
-                    const int K,                // num.  neighbors
-                    const int grid_size_vol,
-                    const float radius_limit2,
-                    const float *d_coord_shift,     // 3
-                    const int *d_grid_size,
-                    const float *d_voxel_size,      // 3
-                    const int *kernel_size,
-                    const int *occ_numpnts,    // B * max_o
-                    const int *occ_2_pnts,            // B * max_o * P
-                    const int *coor_2_occ,      // B * 400 * 400 * 400 
-                    const float *sample_loc,       // B * R * SR * 3
-                    const int *sample_loc_mask,       // B * R * SR
-                    int *sample_pidx,       // B * R * SR * K
+                    const float* in_data,   // #point cloud data input:[1,4242263,3]
+                    const int B,            //1
+                    const int SR,               // num. samples along each ray 24
+                    const int R,               // e.g., 784
+                    const int max_o,            // 610000
+                    const int P,                //26 超参；P：一个体素中最多的点云数量
+                    const int K,                // max num.  neighbors
+                    const int grid_size_vol,    //46298616 = a*b*c
+                    const float radius_limit2,  //radius_limit_np = 0.032  radius_limit2 = 0.032**2
+                    const float *d_coord_shift,     // 3[-1.6265191,-1.9573721,-3.291426]
+                    const int *d_grid_size,         //[344 377 357]
+                    const float *d_voxel_size,      // 3[0.016 0.016 0.016]
+                    const int *kernel_size,         // [3 3 3]
+                    const int *occ_numpnts,    // B * max_o = 610000
+                    const int *occ_2_pnts,            // B * max_o * P [1,610000,26]某个occ中每个点云的index
+                    const int *coor_2_occ,      // B * 400 * 400 * 400  [1,344,377,357]：init=-1；存放的是occ的index(0~610000)
+                    const float *sample_loc,       // B * R * SR * 3 [1,784,24,3],init:all-0，存某个pixel需要采样的点的坐标
+                    const int *sample_loc_mask,       // B * R * SR  [1,784,24],init:all-0，存sample_loc_tensor的msk
+                    int *sample_pidx,       // B * R * SR * K [1,784,24,8]init-all -1;8，即K，一个查询点的max num.  neighbors；返回每个像素（784个）所要query的每个点（24个）的真实邻居点（最临近的8点）的pid
                     unsigned long seconds,
                     const int NN
                 ) {
@@ -458,7 +466,7 @@ class lighting_fast_querier():
                     float centerx = sample_loc[index * 3];
                     float centery = sample_loc[index * 3 + 1];
                     float centerz = sample_loc[index * 3 + 2];
-                    int frustx = (int) floor((centerx - d_coord_shift[0]) / d_voxel_size[0]);
+                    int frustx = (int) floor((centerx - d_coord_shift[0]) / d_voxel_size[0]);//这个点云所在的体素场的坐标frustx,y,z
                     int frusty = (int) floor((centery - d_coord_shift[1]) / d_voxel_size[1]);
                     int frustz = (int) floor((centerz - d_coord_shift[2]) / d_voxel_size[2]);
                                         
@@ -469,6 +477,7 @@ class lighting_fast_querier():
                     int kid = 0, far_ind = 0, coor_z, coor_y, coor_x;
                     float far2 = 0.0;
                     float xyz2Buffer[KN];
+                    //按照kernel_size在occ内遍历[344 377 357]
                     for (int layer = 0; layer < (kernel_size[0]+1)/2; layer++){                        
                         for (int x = max(-frustx, -layer); x < min(d_grid_size[0] - frustx, layer + 1); x++) {
                             coor_x = frustx + x;
@@ -478,23 +487,23 @@ class lighting_fast_querier():
                                     coor_z = z + frustz;
                                     if (max(abs(z), max(abs(x), abs(y))) != layer) continue;
                                     int coor_indx_b = i_batch * grid_size_vol + coor_x * (d_grid_size[1] * d_grid_size[2]) + coor_y * d_grid_size[2] + coor_z;
-                                    int occ_indx = coor_2_occ[coor_indx_b] + i_batch * max_o;
-                                    if (occ_indx >= 0) {
-                                        for (int g = 0; g < min(P, occ_numpnts[occ_indx]); g++) {
-                                            int pidx = occ_2_pnts[occ_indx * P + g];
-                                            float x_v = (in_data[pidx*3]-centerx);
+                                    int occ_indx = coor_2_occ[coor_indx_b] + i_batch * max_o;//[1,344,377,357]，从中取出occ的index(0-610000)
+                                    if (occ_indx >= 0) {//if occ_indx = -1则里面没点
+                                        for (int g = 0; g < min(P, occ_numpnts[occ_indx]); g++) {//occ_numpnts:某个occ中点云的数量，P超参：最大的点云数量
+                                            int pidx = occ_2_pnts[occ_indx * P + g];//occ_2_pnts[1,610000,26]，从每个occ中取出每个点的index
+                                            float x_v = (in_data[pidx*3]-centerx);//in_data[pidx*3]：点云坐标；centerx:query点的坐标
                                             float y_v = (in_data[pidx*3 + 1]-centery);
                                             float z_v = (in_data[pidx*3 + 2]-centerz);
-                                            float xyz2 = x_v * x_v + y_v * y_v + z_v * z_v;
-                                            if ((radius_limit2 == 0 || xyz2 <= radius_limit2)){
-                                                if (kid++ < K) {
-                                                    sample_pidx[index * K + kid - 1] = pidx;
-                                                    xyz2Buffer[kid-1] = xyz2;
+                                            float xyz2 = x_v * x_v + y_v * y_v + z_v * z_v;//点到query点距离**2
+                                            if ((radius_limit2 == 0 || xyz2 <= radius_limit2)){//如果是在radius_limit2的范围内
+                                                if (kid++ < K) {//K:max num.  neighbors;kid:current num neighbors
+                                                    sample_pidx[index * K + kid - 1] = pidx;//sample_pidx存相应的pidx
+                                                    xyz2Buffer[kid-1] = xyz2;//缓存xyz距离
                                                     if (xyz2 > far2){
-                                                        far2 = xyz2;
+                                                        far2 = xyz2;//存储最远点的距离和index
                                                         far_ind = kid - 1;
                                                     }
-                                                } else {
+                                                } else {//如果已经采集满了，去替换掉最远的那个点，即这8个点已经是离query点最近的点
                                                     if (xyz2 < far2) {
                                                         sample_pidx[index * K + far_ind] = pidx;
                                                         xyz2Buffer[far_ind] = xyz2;
@@ -534,6 +543,7 @@ class lighting_fast_querier():
 
 
     def build_occ_vox(self, point_xyz_w_tensor, actual_numpoints_tensor, B, N, P, max_o, scaled_vdim_np, kMaxThreadsPerBlock, gridSize, scaled_vsize_gpu, scaled_vdim_gpu, kernel_size_gpu, grid_size_vol, d_coord_shift):
+        #scaled_vdim_np：体素场的dim，[334,377,357]
         device = point_xyz_w_tensor.device
         coor_occ_tensor = torch.zeros([B, scaled_vdim_np[0], scaled_vdim_np[1], scaled_vdim_np[2]], dtype=torch.int32, device=device)#scaled_vdim_np:[B，344,377,357]
         occ_2_pnts_tensor = torch.full([B, max_o, P], -1, dtype=torch.int32, device=device)#max_o:610000,P:2
@@ -542,65 +552,67 @@ class lighting_fast_querier():
         coor_2_occ_tensor = torch.full([B, scaled_vdim_np[0], scaled_vdim_np[1], scaled_vdim_np[2]], -1, dtype=torch.int32, device=device)
         occ_idx_tensor = torch.zeros([B], dtype=torch.int32, device=device)
         seconds = time.time()
-
+        '''
+        对站位场进行初始化
+        '''
         self.claim_occ(
-            Holder(point_xyz_w_tensor),
-            Holder(actual_numpoints_tensor),
-            np.int32(B),
-            np.int32(N),
-            d_coord_shift,
-            scaled_vsize_gpu,
-            scaled_vdim_gpu,
-            np.int32(grid_size_vol),
-            np.int32(max_o),
-            Holder(occ_idx_tensor),
-            Holder(coor_2_occ_tensor),
-            Holder(occ_2_coor_tensor),
+            Holder(point_xyz_w_tensor),#[1,4242263,3],点云input数据
+            Holder(actual_numpoints_tensor),#value = 4242263
+            np.int32(B),#1
+            np.int32(N),#4242263
+            d_coord_shift,#[3],values = [-1.6265191,-1.9573721,-3.291426]取的是整个boudingbox的三个最小值，作为体素场的原点，即体素场坐标皆为正数
+            scaled_vsize_gpu,#[3],values = [0.016,0.016,0.016]:单个voxel的size
+            scaled_vdim_gpu,#[3],values = [344,377,357]:voxel‘s dim for every axises
+            np.int32(grid_size_vol),#46298616 = 344*377*357 整个的voxel的数量
+            np.int32(max_o),#一次性取的最多的voxel数量
+            Holder(occ_idx_tensor),#outputs, B ,初始值都为0 , values = [599947]，目前正在遍历的idx
+            Holder(coor_2_occ_tensor),#outputs,[1,344,377,357]初始值都是-1,如果遍历到某一voxel变成0
+            Holder(occ_2_coor_tensor),#outputs,[1,610000,3]初始值皆为-1，而后变成遍历到的体素场的坐标
             np.uint64(seconds),
             block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1))
         # torch.cuda.synchronize()
         coor_2_occ_tensor = torch.full([B, scaled_vdim_np[0], scaled_vdim_np[1], scaled_vdim_np[2]], -1,
                                        dtype=torch.int32, device=device)
-        gridSize = int((B * max_o + kMaxThreadsPerBlock - 1) / kMaxThreadsPerBlock)
+        # 对每一个体素场坐标，查看kernel_size内所有体素激活（coor_occ即置1，否则是0）, 这些都是我们后面要搞的体素
+        gridSize = int((B * max_o + kMaxThreadsPerBlock - 1) / kMaxThreadsPerBlock)#4143
         self.map_coor2occ(
-            np.int32(B),
-            scaled_vdim_gpu,
-            kernel_size_gpu,
-            np.int32(grid_size_vol),
-            np.int32(max_o),
-            Holder(occ_idx_tensor),
-            Holder(coor_occ_tensor),
-            Holder(coor_2_occ_tensor),
-            Holder(occ_2_coor_tensor),
+            np.int32(B),#1
+            scaled_vdim_gpu,#[3],values = [344 377 357]
+            kernel_size_gpu,#[3],values = [3 3 3],超参，搜索的半径范围
+            np.int32(grid_size_vol),#46298616 = 344*377*357 整个的voxel的数量
+            np.int32(max_o),#一次性取的最多的voxel数量
+            Holder(occ_idx_tensor),#[1]初始值为遍历到的点云idx
+            Holder(coor_occ_tensor),#[1,344,377,357]初始时皆为0,如果是在体素场坐标(occ_2_coor)的kernel_size内的值，则置1
+            Holder(coor_2_occ_tensor),#[1,344,377,357]初始时皆为-1；之后存的index值,采样点的索引
+            Holder(occ_2_coor_tensor),#[1,610000,3]体素场坐标，此函数中未改变
             block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1))
         # torch.cuda.synchronize()
         seconds = time.time()
-
-        gridSize = int((B * N + kMaxThreadsPerBlock - 1) / kMaxThreadsPerBlock)
+        gridSize = int((B * N + kMaxThreadsPerBlock - 1) / kMaxThreadsPerBlock)#4143
+        #目前推测该函数：遍历每个点云(point_xyz_w_tensor)；我们之前采样了max_o个体素，把每个occ里面的点云
         self.fill_occ2pnts(
-            Holder(point_xyz_w_tensor),
-            Holder(actual_numpoints_tensor),
-            np.int32(B),
-            np.int32(N),
-            np.int32(P),
-            d_coord_shift,
-            scaled_vsize_gpu,
-            scaled_vdim_gpu,
-            np.int32(grid_size_vol),
-            np.int32(max_o),
-            Holder(coor_2_occ_tensor),
-            Holder(occ_2_pnts_tensor),
-            Holder(occ_numpnts_tensor),
+            Holder(point_xyz_w_tensor),#[1,4242263,3],点云input数据
+            Holder(actual_numpoints_tensor),#values = [4242263]
+            np.int32(B),# 1
+            np.int32(N),# 4242263
+            np.int32(P),#26 超参；P：一个体素中最多的点云数量
+            d_coord_shift,#[-1.6265,-1.9573,-3.2914]
+            scaled_vsize_gpu,#[0.0016 0.0016 0.0016]
+            scaled_vdim_gpu,# [344 377 357]
+            np.int32(grid_size_vol),# 46298616 = 344*377*357
+            np.int32(max_o), # 610000
+            Holder(coor_2_occ_tensor),#[1,344,377,357]初始时皆为-1；看起来应该存的index值？
+            Holder(occ_2_pnts_tensor),#[1,610000,26]未曾出现过，初始化皆为-1;
+            Holder(occ_numpnts_tensor),#[1,610000]未曾出现过，初始化皆为 0;
             np.uint64(seconds),
             block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1))
-        # torch.cuda.synchronize()
         '''
-        coor_occ_tensor:torch.Size([1, 344, 377, 357]) 
-        occ_2_coor_tensor:torch.Size([1, 610000, 3]) 
-        coor_2_occ_tensor:torch.Size([1, 344, 377, 357]) 
+        coor_occ_tensor:torch.Size([1, 344, 377, 357]) :1 or 0，这个体素场如果在kernelsize范围内，则1, else 0
+        occ_2_coor_tensor:torch.Size([1, 610000, 3]) max_o个采样(OCC)的体素场的坐标
+        coor_2_occ_tensor:torch.Size([1, 344, 377, 357]) ：init=-1；存放的是occ的index
         occ_idx_tensor:torch.Size([1]) 
-        occ_numpnts_tensor:torch.Size([1, 610000]) 
-        occ_2_pnts_tensor:torch.Size([1, 610000, 26])
+        occ_numpnts_tensor:torch.Size([1, 610000]) #某个occ中点云数量
+        occ_2_pnts_tensor:torch.Size([1, 610000, 26])#某个occ中每个点云的index
         '''
         return coor_occ_tensor, occ_2_coor_tensor, coor_2_occ_tensor, occ_idx_tensor, occ_numpnts_tensor, occ_2_pnts_tensor
 
@@ -622,61 +634,61 @@ class lighting_fast_querier():
         gridSize = int((B * N + kMaxThreadsPerBlock - 1) / kMaxThreadsPerBlock)
         coor_occ_tensor, occ_2_coor_tensor, coor_2_occ_tensor, occ_idx_tensor, occ_numpnts_tensor, occ_2_pnts_tensor = self.build_occ_vox(point_xyz_w_tensor, actual_numpoints_tensor, B, N, P, max_o, scaled_vdim_np, kMaxThreadsPerBlock, gridSize, scaled_vsize_gpu, scaled_vdim_gpu, query_size_gpu, grid_size_vol, d_coord_shift)
         '''
-        coor_occ_tensor:torch.Size([1, 344, 377, 357]) 
-        occ_2_coor_tensor:torch.Size([1, 610000, 3]) 
-        coor_2_occ_tensor:torch.Size([1, 344, 377, 357]) 
+        coor_occ_tensor:torch.Size([1, 344, 377, 357]) :1 or 0，这个体素场如果在kernelsize范围内，则1, else 0
+        occ_2_coor_tensor:torch.Size([1, 610000, 3]) max_o个采样(OCC)的体素场的坐标
+        coor_2_occ_tensor:torch.Size([1, 344, 377, 357]) ：init=-1；存放的是occ的index(0~610000)
         occ_idx_tensor:torch.Size([1]) 
-        occ_numpnts_tensor:torch.Size([1, 610000]) 
-        occ_2_pnts_tensor:torch.Size([1, 610000, 26])
+        occ_numpnts_tensor:torch.Size([1, 610000]) #某个occ中点云数量
+        occ_2_pnts_tensor:torch.Size([1, 610000, 26])#某个occ中每个点云的index
         '''
         # torch.cuda.synchronize()
         # print("coor_occ_tensor", torch.min(coor_occ_tensor), torch.max(coor_occ_tensor), torch.min(occ_2_coor_tensor), torch.max(occ_2_coor_tensor), torch.min(coor_2_occ_tensor), torch.max(coor_2_occ_tensor), torch.min(occ_idx_tensor), torch.max(occ_idx_tensor), torch.min(occ_numpnts_tensor), torch.max(occ_numpnts_tensor), torch.min(occ_2_pnts_tensor), torch.max(occ_2_pnts_tensor), occ_2_pnts_tensor.shape)
         # print("occ_numpnts_tensor", torch.sum(occ_numpnts_tensor > 0), ranges_np)
         # vis_vox(ranges_np, scaled_vsize_np, coor_2_occ_tensor)
 
-        raypos_mask_tensor = torch.zeros([B, R, D], dtype=torch.int32, device=device)
+        raypos_mask_tensor = torch.zeros([B, R, D], dtype=torch.int32, device=device)#[1,784,400];all 0 init 784采样的像素数，400每个ray中sample的点数
         gridSize = int((B * R * D + kMaxThreadsPerBlock - 1) / kMaxThreadsPerBlock)
+        #mask一下，哪些附近是有点的，哪些是没点的
         self.mask_raypos(
-            Holder(raypos_tensor),  # [1, 2048, 400, 3]
-            Holder(coor_occ_tensor),  # [1, 2048, 400, 3]
-            np.int32(B),
-            np.int32(R),
-            np.int32(D),
-            np.int32(grid_size_vol),
-            d_coord_shift,
-            scaled_vdim_gpu,
-            scaled_vsize_gpu,
-            Holder(raypos_mask_tensor),
+            Holder(raypos_tensor),  # [1, 784, 400, 3]要query的点的世界坐标
+            Holder(coor_occ_tensor),  # [1, 344, 377, 357]算是一个mask 1 or 0，这个体素场如果在kernelsize范围内，则1, else 0
+            np.int32(B),# 1
+            np.int32(R),# 784
+            np.int32(D),# 400
+            np.int32(grid_size_vol),# 46298616
+            d_coord_shift,# [-1.6265191, -1.9573721 -3.291426]
+            scaled_vdim_gpu, #[344 377 357]
+            scaled_vsize_gpu,# [0.016 0.016 0.016]
+            Holder(raypos_mask_tensor),#[1,784,400];all 0 init
             block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1)
         )
-
         # torch.cuda.synchronize()
         # print("raypos_mask_tensor", raypos_mask_tensor.shape, torch.sum(coor_occ_tensor), torch.sum(raypos_mask_tensor))
         # save_points(raypos_tensor.reshape(-1, 3), "./", "rawraypos_pnts")
         # raypos_masked = torch.masked_select(raypos_tensor, raypos_mask_tensor[..., None] > 0)
         # save_points(raypos_masked.reshape(-1, 3), "./", "raypos_pnts")
-
+        #如果有的射线上sample到的全是空白，则没必要要了
         ray_mask_tensor = torch.max(raypos_mask_tensor, dim=-1)[0] > 0 # B, R
         R = torch.max(torch.sum(ray_mask_tensor.to(torch.int32))).cpu().numpy()
-        sample_loc_tensor = torch.zeros([B, R, SR, 3], dtype=torch.float32, device=device)
-        sample_pidx_tensor = torch.full([B, R, SR, K], -1, dtype=torch.int32, device=device)
+        sample_loc_tensor = torch.zeros([B, R, SR, 3], dtype=torch.float32, device=device)#[1,784,24,3]
+        sample_pidx_tensor = torch.full([B, R, SR, K], -1, dtype=torch.int32, device=device)#[1,784,24,8]
         if R > 0:#True
             raypos_tensor = torch.masked_select(raypos_tensor, ray_mask_tensor[..., None, None].expand(-1, -1, D, 3)).reshape(B, R, D, 3)
             raypos_mask_tensor = torch.masked_select(raypos_mask_tensor, ray_mask_tensor[..., None].expand(-1, -1, D)).reshape(B, R, D)
             # print("R", R, raypos_tensor.shape, raypos_mask_tensor.shape)
-
-            raypos_maskcum = torch.cumsum(raypos_mask_tensor, dim=-1).to(torch.int32)
-            raypos_mask_tensor = (raypos_mask_tensor * raypos_maskcum * (raypos_maskcum <= SR)) - 1
-            sample_loc_mask_tensor = torch.zeros([B, R, SR], dtype=torch.int32, device=device)
+            #raypos_mask_tensor：[1,784,400] raypos_maskcum[1,784,400];对每个ray的采样点的msk累加，截止到这个采样点，这个ray之前有多少需要处理的点
+            raypos_maskcum = torch.cumsum(raypos_mask_tensor, dim=-1).to(torch.int32)#[1,784,400],按ray做mask的累加
+            raypos_mask_tensor = (raypos_mask_tensor * raypos_maskcum * (raypos_maskcum <= SR)) - 1#-1 -1 0 1 -1 -1 0 1 2 3 4 5 -1 -1 ...SR，一条ray一次性最多采样的点数
+            sample_loc_mask_tensor = torch.zeros([B, R, SR], dtype=torch.int32, device=device)#[1,784,24]
             self.get_shadingloc(
-                Holder(raypos_tensor),  # [1, 2048, 400, 3]
-                Holder(raypos_mask_tensor),
-                np.int32(B),
-                np.int32(R),
-                np.int32(D),
-                np.int32(SR),
-                Holder(sample_loc_tensor),
-                Holder(sample_loc_mask_tensor),
+                Holder(raypos_tensor),  # [1, 784, 400, 3]要采样要query的点的世界坐标
+                Holder(raypos_mask_tensor),#[1,784,400],沿光线这是第几个被采样的点-1 -1 0 1 -1 -1 1 2 3 4 5 -1 -1 -1 ...
+                np.int32(B),# 1
+                np.int32(R),#784
+                np.int32(D),# 400
+                np.int32(SR),# 24SR，一条ray一次性最多采样的点数
+                Holder(sample_loc_tensor),#[1,784,24,3],init:all-0，存某个pixel需要采样的点的坐标
+                Holder(sample_loc_mask_tensor),#[1,784,24],init:all-0，存sample_loc_tensor的msk
                 block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1)
             )
 
@@ -688,25 +700,25 @@ class lighting_fast_querier():
             seconds = time.time()
             gridSize = int((B * R * SR + kMaxThreadsPerBlock - 1) / kMaxThreadsPerBlock)
             self.query_along_ray(
-                Holder(point_xyz_w_tensor),
-                np.int32(B),
-                np.int32(SR),
-                np.int32(R),
-                np.int32(max_o),
-                np.int32(P),
-                np.int32(K),
-                np.int32(grid_size_vol),
-                np.float32(radius_limit_np ** 2),
-                d_coord_shift,
-                scaled_vdim_gpu,
-                scaled_vsize_gpu,
-                kernel_size_gpu,
-                Holder(occ_numpnts_tensor),
-                Holder(occ_2_pnts_tensor),
-                Holder(coor_2_occ_tensor),
-                Holder(sample_loc_tensor),
-                Holder(sample_loc_mask_tensor),
-                Holder(sample_pidx_tensor),
+                Holder(point_xyz_w_tensor),#point cloud data input:[1,4242263,3]
+                np.int32(B),# 1
+                np.int32(SR),# 24
+                np.int32(R),# 784
+                np.int32(max_o),#610000
+                np.int32(P),#26 超参；P：一个体素中最多的点云数量
+                np.int32(K),# 8:num.  neighbors
+                np.int32(grid_size_vol),#46298616 = a*b*c
+                np.float32(radius_limit_np ** 2),#radius_limit_np = 0.032
+                d_coord_shift,#[-1.6265191,-1.9573721,-3.291426]
+                scaled_vdim_gpu,#[344 377 357]
+                scaled_vsize_gpu,#[0.016 0.016 0.016]
+                kernel_size_gpu,#[3 3 3]
+                Holder(occ_numpnts_tensor),#[1,610000]，某个occ中pnts数量
+                Holder(occ_2_pnts_tensor),#[1,610000,26]某个occ中每个点云的index
+                Holder(coor_2_occ_tensor),#[1,344,377,357]：init=-1；存放的是occ的index(0~610000)
+                Holder(sample_loc_tensor),#[1,784,24,3],init:all-0，存某个pixel需要query的点的坐标
+                Holder(sample_loc_mask_tensor),#[1,784,24],init:all-0，存sample_loc_tensor的msk
+                Holder(sample_pidx_tensor),#B * R * SR * K [1,784,24,8]init-all -1;8，即K，一个查询点的max num.  neighbors；返回每个像素（784个）所要query的每个点（24个）的真实邻居点（最临近的8点）的pid
                 np.uint64(seconds),
                 np.int32(self.opt.NN),
                 block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1))
@@ -715,18 +727,17 @@ class lighting_fast_querier():
             # queried_masked = point_xyz_w_tensor[0][sample_pidx_tensor.reshape(-1).to(torch.int64), :]
             # save_points(queried_masked.reshape(-1, 3), "./", "queried_pnts{}".format(self.count))
             # print("valid ray",  torch.sum(torch.sum(sample_loc_mask_tensor, dim=-1) > 0))
-            #
             masked_valid_ray = torch.sum(sample_pidx_tensor.view(B, R, -1) >= 0, dim=-1) > 0
-            #[1,784]True
+            #[1,784]True;masked_valid_ray存完全没有点的ray，即不需要参加渲染的
             R = torch.max(torch.sum(masked_valid_ray.to(torch.int32), dim=-1)).cpu().numpy()
             #[784]R means ray
             ray_mask_tensor.masked_scatter_(ray_mask_tensor, masked_valid_ray)#ray_mask_tensor[1,784]-True.all()
             sample_pidx_tensor = torch.masked_select(sample_pidx_tensor, masked_valid_ray[..., None, None].expand(-1, -1, SR, K)).reshape(B, R, SR, K)
             sample_loc_tensor = torch.masked_select(sample_loc_tensor, masked_valid_ray[..., None, None].expand(-1, -1, SR, 3)).reshape(B, R, SR, 3)
-        # self.count+=1
+        #sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
+        #sample_loc_tensor[1,784,24,3],init:all-0，存某个pixel需要query的点的坐标
+        #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
         return sample_pidx_tensor, sample_loc_tensor, ray_mask_tensor.to(torch.int8)
-
-
 def load_pnts(point_path, point_num):
     with open(point_path, 'rb') as f:
         print("point_file_path################", point_path)

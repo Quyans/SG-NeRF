@@ -524,18 +524,18 @@ def ray_march(ray_dist,
     # background_transmission: N x Rays x 1
 
     # 体渲染
-    point_color = render_func(ray_features)
+    point_color = render_func(ray_features)#ray_features[1:4]取color
 
     # we are essentially predicting predict 1 - e^-sigma
-    sigma = ray_features[..., 0] * ray_valid.float()
-    opacity = 1 - torch.exp(-sigma * ray_dist)
+    sigma = ray_features[..., 0] * ray_valid.float()#[1，784，24]
+    opacity = 1 - torch.exp(-sigma * ray_dist)#[1,784,24]
 
     # cumprod exclusive
-    acc_transmission = torch.cumprod(1. - opacity + 1e-10, dim=-1)
+    acc_transmission = torch.cumprod(1. - opacity + 1e-10, dim=-1)#cumulative product yi = x1*x2*...*xn
     temp = torch.ones(opacity.shape[0:2] + (1, )).to(
         opacity.device).float()  # N x R x 1
 
-    background_transmission = acc_transmission[:, :, [-1]]
+    background_transmission = acc_transmission[:, :, [-1]]#[1,784,1]
     acc_transmission = torch.cat([temp, acc_transmission[:, :, :-1]], dim=-1)
 
     blend_weight = blend_func(opacity, acc_transmission)[..., None]
@@ -544,7 +544,7 @@ def ray_march(ray_dist,
     if bg_color is not None:
         ray_color += bg_color.to(opacity.device).float().view(
             background_transmission.shape[0], 1, 3) * background_transmission
-    # #
+    #
     # if point_color.shape[1] > 0 and (torch.any(torch.isinf(point_color)) or torch.any(torch.isnan(point_color))):
     #     print("ray_color", torch.min(ray_color),torch.max(ray_color))
 

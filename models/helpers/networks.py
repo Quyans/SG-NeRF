@@ -179,13 +179,14 @@ def positional_encoding(positions, freqs, ori=False):
     Return:
         pts: :math:`(..., 2DF)`
     '''
-    freq_bands = (2**torch.arange(freqs).float()).to(positions.device)  # (F,)
+    freq_bands = (2**torch.arange(freqs).float()).to(positions.device)  # 标量(F,)
     #[1,2,4,8,16,32,64,128]
-    ori_c = positions.shape[-1]
+    ori_c = positions.shape[-1]#3
+    #(positions[..., None] * freq_bands)：[18816,3,F];pts:[18816,12]
     pts = (positions[..., None] * freq_bands).reshape(positions.shape[:-1] +
-                                                      (freqs * positions.shape[-1], ))  # (..., DF)
-    if ori:
+                                                      (freqs * positions.shape[-1], ))  # (..., DF) e.g.[18816,12]
+    if ori:#TRUE
         pts = torch.cat([positions, torch.sin(pts), torch.cos(pts)], dim=-1).reshape(pts.shape[:-1]+(pts.shape[-1]*2+ori_c,))
-    else:#TRUE
+    else:
         pts = torch.stack([torch.sin(pts), torch.cos(pts)], dim=-1).reshape(pts.shape[:-1]+(pts.shape[-1]*2,))
     return pts
