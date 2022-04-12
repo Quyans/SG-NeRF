@@ -299,7 +299,7 @@ class ScannetFtDataset(BaseDataset):
         self.all_id_list = self.filter_valid_id(list(range(len(self.image_paths))))
         if len(self.all_id_list) > 2900: # neural point-based graphics' configuration
             self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
-            self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做测试
+            self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
         else:  # nsvf configuration->go this way in defalut train scannet
             step=5
             self.train_id_list = self.all_id_list[::step]
@@ -441,7 +441,7 @@ class ScannetFtDataset(BaseDataset):
             world_xyz = (cam_xyz.view(-1,4) @ c2w.t())[...,:3]
             # print("cam_xyz", torch.min(cam_xyz, dim=-2)[0], torch.max(cam_xyz, dim=-2)[0])
             # print("world_xyz", world_xyz.shape) #, torch.min(world_xyz.view(-1,3), dim=-2)[0], torch.max(world_xyz.view(-1,3), dim=-2)[0])
-            if vox_res > 0:
+            if vox_res > 0:#True,vox_res = 100
                 world_xyz = mvs_utils.construct_vox_points_xyz(world_xyz, vox_res)
                 # print("world_xyz", world_xyz.shape)
             world_xyz_all = torch.cat([world_xyz_all, world_xyz], dim=0)

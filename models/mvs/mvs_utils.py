@@ -301,8 +301,7 @@ def homo_warp_nongrid(c2w, w2c, intrinsic, ref_cam_xyz, HD, WD, filter=True, **k
     B, M, _ = ref_cam_xyz.shape
     if w2c is not None:
         src_cam_xyz = torch.cat([ref_cam_xyz, torch.ones_like(ref_cam_xyz[:,:,0:1])], dim=-1) @ c2w.transpose(1,2) @ w2c.transpose(1,2)
-    else:
-        src_cam_xyz = ref_cam_xyz
+    else:        src_cam_xyz = ref_cam_xyz
     src_grid = ((src_cam_xyz[..., :3] / src_cam_xyz[..., 2:3]) @ intrinsic.transpose(1,2))[...,:2]
 
     mask = torch.prod(torch.cat([torch.ge(src_grid, torch.zeros([1,1,2], device=src_grid.device)), torch.le(src_grid, torch.tensor([[[WD-1,HD-1]]], device=src_grid.device))],dim=-1), dim=-1, keepdim=True, dtype=torch.int8) > 0
@@ -410,6 +409,7 @@ def get_rayplane_cross(cam_pos, raydir, p_co, p_no, epsilon=1e-3):
 
 def extract_from_2d_grid(src_feat, src_grid, mask):
     B, M, _ = src_grid.shape
+    # src_feat:l0:[1,3,480,640],feature；src_grid:[1,1，3029,2]要查的像素点
     warped_src_feat = F.grid_sample(src_feat, src_grid[:, None, ...], mode='bilinear', padding_mode='zeros', align_corners=True)  # (B, C, D, H*W)
     warped_src_feat = warped_src_feat.permute(0,2,3,1).view(B, M, src_feat.shape[1]).cuda() # 1, 224874, 3
     if mask is not None:
@@ -418,7 +418,6 @@ def extract_from_2d_grid(src_feat, src_grid, mask):
         full_src_feat[0, mask[0,:,0], :] = warped_src_feat
         warped_src_feat = full_src_feat
     return warped_src_feat
-
 
 def homo_warp(src_feat, proj_mat, depth_values, src_grid=None, pad=0):
     """

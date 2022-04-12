@@ -602,7 +602,7 @@ def main():
     points_xyz_all=None
     with torch.no_grad():
         print(opt.checkpoints_dir + opt.name + "/*_net_ray_marching.pth")
-        if len([n for n in glob.glob(opt.checkpoints_dir + opt.name + "/*_net_ray_marching.pth") if os.path.isfile(n)]) > 0:
+        if len([n for n in glob.glob(opt.checkpoints_dir + opt.name + "/*_net_ray_marching.pth") if os.path.isfile(n)]) > 0:#has raymarching
             #Here maybe rendering a plane ,not 360
             if opt.bgmodel.endswith("plane"):
                 _, _, _, _, _, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst = gen_points_filter_embeddings(train_dataset, visualizer, opt)
@@ -636,26 +636,26 @@ def main():
             opt.resume_iter = resume_iter
             opt.is_train=True
             model = create_model(opt)#In default train scannet:initialize /models/mvs_points_volumetric_model.py
-        elif opt.load_points < 1:#无_net_ray_marching
+        elif opt.load_points < 1:#no exsist _net_ray_marching,from COLMAP to generate point feature
             points_xyz_all, points_embedding_all, points_color_all, points_dir_all, points_conf_all, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst = gen_points_filter_embeddings(train_dataset, visualizer, opt)
             opt.resume_iter = opt.resume_iter if opt.resume_iter != "latest" else get_latest_epoch(opt.resume_dir)
             opt.is_train=True
             opt.mode = 2
             model = create_model(opt)
-        else:#无_net_ray_marching
-            load_points = opt.load_points
+        else:#no exsist _net_ray_marching,from MVSNET to generate point feature
+            load_points = opt.load_points#2
             opt.is_train = False
             opt.mode = 1
             opt.load_points = 0
             model = create_model(opt)
             model.setup(opt)
             model.eval()
-            if load_points in [1,3]:
+            if load_points in [1,3]:#False
                 points_xyz_all = train_dataset.load_init_points()
-            if load_points == 2:
+            if load_points == 2:#True
                 points_xyz_all = train_dataset.load_init_depth_points(device="cuda", vox_res=100)
-            if load_points == 3:
-                depth_xyz_all = train_dataset.load_init_depth_points(device="cuda", vox_res=80)
+            if load_points == 3:#False
+                depth_xyz_all = train_dataset.load_init_depth_points(device="cuda", vox_res=80)#重建深度图
                 print("points_xyz_all",points_xyz_all.shape)
                 print("depth_xyz_all", depth_xyz_all.shape)
                 filter_res = 100
@@ -687,7 +687,7 @@ def main():
             if opt.vox_res > 0:
                 points_xyz_all = [points_xyz_all] if not isinstance(points_xyz_all, list) else points_xyz_all
                 points_xyz_holder = torch.zeros([0,3], dtype=points_xyz_all[0].dtype, device="cuda")
-                for i in range(len(points_xyz_all)):
+                for i in range(len(points_xyz_all)):#一次遍历的是一张图片里
                     points_xyz = points_xyz_all[i]
                     vox_res = opt.vox_res // (1.5**i)
                     print("load points_xyz", points_xyz.shape)
@@ -708,10 +708,10 @@ def main():
                 points_xyz_all = points_xyz_all[inds, ...]
 
             campos, camdir = train_dataset.get_campos_ray()
-            cam_ind = nearest_view(campos, camdir, points_xyz_all, train_dataset.id_list)
+            cam_ind = nearest_view(campos, camdir, points_xyz_all, train_dataset.id_list)#找到每个点其最近camera
             unique_cam_ind = torch.unique(cam_ind)
             print("unique_cam_ind", unique_cam_ind.shape)
-            points_xyz_all = [points_xyz_all[cam_ind[:,0]==unique_cam_ind[i], :] for i in range(len(unique_cam_ind))]
+            points_xyz_all = [points_xyz_all[cam_ind[:,0]==unique_cam_ind[i], :] for i in range(len(unique_cam_ind))]#按照camera list 分开points_xyz_all
 
             featuredim = opt.point_features_dim
             points_embedding_all = torch.zeros([1, 0, featuredim], device=unique_cam_ind.device, dtype=torch.float32)
@@ -719,15 +719,15 @@ def main():
             points_dir_all = torch.zeros([1, 0, 3], device=unique_cam_ind.device, dtype=torch.float32)
             points_conf_all = torch.zeros([1, 0, 1], device=unique_cam_ind.device, dtype=torch.float32)
             print("extract points embeding & colors", )
-            for i in tqdm(range(len(unique_cam_ind))):
+            for i in tqdm(range(len(unique_cam_ind))):#对于每个camera，生成全局中离自己最近的点的特征
                 id = unique_cam_ind[i]
                 batch = train_dataset.get_item(id, full_img=True)
                 HDWD = [train_dataset.height, train_dataset.width]
                 c2w = batch["c2w"][0].cuda()
                 w2c = torch.inverse(c2w)
                 intrinsic = batch["intrinsic"].cuda()
-                # cam_xyz_all 252, 4
                 cam_xyz_all = (torch.cat([points_xyz_all[i], torch.ones_like(points_xyz_all[i][...,-1:])], dim=-1) @ w2c.transpose(0,1))[..., :3]
+                # embedding->图像卷积后的feature，点采样，过个mlp得到的
                 embedding, color, dir, conf = model.query_embedding(HDWD, cam_xyz_all[None,...], None, batch['images'].cuda(), c2w[None, None,...], w2c[None, None,...], intrinsic[:, None,...], 0, pointdir_w=True)
                 conf = conf * opt.default_conf if opt.default_conf > 0 and opt.default_conf < 1.0 else conf
                 points_embedding_all = torch.cat([points_embedding_all, embedding], dim=1)
@@ -737,7 +737,7 @@ def main():
                 # visualizer.save_neural_points(id, cam_xyz_all, color, batch, save_ref=True)
             points_xyz_all=torch.cat(points_xyz_all, dim=0)
             visualizer.save_neural_points("init", points_xyz_all, points_color_all, None, save_ref=load_points == 0)
-            print("vis")
+            # print("vis")
             # visualizer.save_neural_points("cam", campos, None, None, None)
             # print("vis")
             # exit()
@@ -913,7 +913,6 @@ def main():
                             #     for scheduler in model.schedulers:
                             #         for i in range(total_steps):
                             #             scheduler.step()
-
                             exit()
 
                         visualizer.print_details("$$$$$$$$$$$$$$$$$$$$$$$$$$         add grow new points num: {}, all num: {} $$$$$$$$$$$$$$$$".format(len(add_xyz), len(model.neural_points.xyz)))

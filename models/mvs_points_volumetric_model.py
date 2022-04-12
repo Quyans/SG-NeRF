@@ -98,10 +98,13 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
     def backward(self, iters):
         [optimizer.zero_grad() for optimizer in self.optimizers]
         if self.opt.is_train:
-            # print("self.loss_total", self.ray_masked_coarse_color.grad)
-            # print("self.loss_total", self.loss_total)
+            #print("self.loss_total", self.ray_masked_coarse_color.grad)
+            #print("self.loss_total", self.loss_total)
             if self.loss_total != 0:
-                self.loss_total.backward()
+                try:#!!!!I add this !
+                    self.loss_total.backward()
+                except:
+                    pass
             else:
                 print(fmt.RED + "Loss == 0" +
                       fmt.END)

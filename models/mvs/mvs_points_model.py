@@ -201,7 +201,7 @@ class MvsPointsModel(nn.Module):
         for vid in view_ids:
             w2c = w2cs[:,vid,...] if vid != cam_vid else None
             warp = homo_warp_nongrid_occ if self.args.depth_occ > 0 else homo_warp_nongrid
-            src_grid, mask, hard_id_xy = warp(c2ws[:,cam_vid,...], w2c, intrinsics[:,vid,...], cam_xyz, HD, WD, tolerate=0.1)
+            src_grid, mask, hard_id_xy = warp(c2ws[:,cam_vid,...], w2c, intrinsics[:,vid,...], cam_xyz, HD, WD, tolerate=0.1)#wrap过来的2d坐标，用这个2d坐标去查
 
             warped_feats = []
             for lid in layer_ids:
@@ -230,7 +230,7 @@ class MvsPointsModel(nn.Module):
         points_conf = None
         points_colors = None
         for feat_str in getattr(self.args, feature_str_lst[cam_vid]):
-            if feat_str.startswith("imgfeat"):
+            if feat_str.startswith("imgfeat"):#True
                 _, view_ids, layer_ids = feat_str.split("_")
                 view_ids = [int(a) for a in list(view_ids)]
                 layer_ids = [int(a) for a in list(layer_ids)]
@@ -253,9 +253,9 @@ class MvsPointsModel(nn.Module):
                 if photometric_confidence is None:
                     photometric_confidence = torch.ones_like(points_embedding[0][...,0:1])
                 points_conf = photometric_confidence
-        points_embedding = torch.cat(points_embedding, dim=-1)
+        points_embedding = torch.cat(points_embedding, dim=-1)#[1,5126,56]
         if self.args.shading_feature_mlp_layer0 > 0:
-            points_embedding = self.premlp(torch.cat([points_embedding, points_colors, points_dirs, points_conf], dim=-1))
+            points_embedding = self.premlp(torch.cat([points_embedding, points_colors, points_dirs, points_conf], dim=-1))#一个mlp，都输入，合成一个总的points_embedding,32D
         return points_embedding, points_colors, points_dirs, points_conf
 
 
