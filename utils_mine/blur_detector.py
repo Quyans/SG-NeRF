@@ -34,7 +34,48 @@ class Dataset:
         self.num_of_remove = opt.num_of_remove
         self.color_path_list = [os.path.join(self.color_dir,f) for f in os.listdir(self.color_dir)]
         self.blur_id_list  = self.get_blur_id_list()
+        self.all_id_list = list(range(len(self.color_path_list )))
         print('init down')
+    def automatic_detect_blur(self):
+        assert self.num_of_remove< len(self.color_path_list),'too much images to move! shrink the --num_of_remove'
+
+        print('automatic detect blur image:')
+        blur_score = []
+        for img_path in tqdm(self.color_path_list):
+            img = cv2.imread(img_path)
+            gray_img = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+            var =  cv2.Laplacian(gray_img, cv2.CV_64F).var()
+            blur_score.append(var)
+        blur_score = np.asarray(blur_score)
+        blur_id_list = blur_score.argsort()[:self.num_of_remove] # 认为拉普拉斯算子的方差小的图片为blur图片
+        return blur_id_list
+    def get_blur_id_list(self):
+        blur_id = []
+        if(self.auto_detect):
+            blur_id  = self.automatic_detect_blur()
+        else:
+            print(os.path.join(self.dataset_dir,'blur_list.txt'))
+            if not os.path.exists(os.path.join(self.dataset_dir,'blur_list.txt')):
+                print("Choose Manual,but don't exists blur_list at {}".format(os.path.join(self.dataset_dir,'blur_list.txt')))
+                exit()
+            else:
+                print('Use manual blur_list')
+                blur_id = np.loadtxt(os.path.join(self.dataset_dir,'blur_list.txt')).astype(np.int32)
+        return blur_id
+
+    def rename_dataset(self):
+        # After remove blur images,we need to rename every sequence one by one
+        self.not_blur_list = [id for id in self.all_id_list if id not in self.blur_id_list]
+        for i in tqdm(range(len(self.not_blur_list))):
+            ori_color_path = os.path.join(self.color_dir,'{}.jpg'.format(self.not_blur_list[i]))
+            ori_depth_path = os.path.join(self.depth_dir, '{}.png'.format(self.not_blur_list[i]))
+            ori_pose_path = os.path.join(self.pose_dir, '{}.txt'.format(self.not_blur_list[i]))
+            new_color_path = os.path.join(self.color_dir,'{}.jpg'.format(i))
+            new_depth_path = os.path.join(self.depth_dir, '{}.png'.format(i))
+            new_pose_path = os.path.join(self.pose_dir, '{}.txt'.format(i))
+            os.rename(ori_color_path,new_depth_path)
+            os.rename(ori_depth_path, new_depth_path)
+            os.rename(ori_pose_path, new_pose_path)
     def remove_blur_data(self):
         print('data to remove:\n',self.blur_id_list)
         print('Removing blur data')
@@ -49,32 +90,6 @@ class Dataset:
             os.remove(depth_path)
             os.remove(pose_path)
         print('Remove blur data down')
-    def get_blur_id_list(self):
-        blur_id = []
-        if(self.auto_detect):
-            blur_id  = self.automatic_detect_blur()
-        else:
-            print(os.path.join(self.dataset_dir,'blur_list.txt'))
-            if not os.path.exists(os.path.join(self.dataset_dir,'blur_list.txt')):
-                print("Choose Manual,but don't exists blur_list at {}".format(os.path.join(self.dataset_dir,'blur_list.txt')))
-                exit()
-            else:
-                print('Use manual blur_list')
-                blur_id = np.loadtxt(os.path.join(self.dataset_dir,'blur_list.txt')).astype(np.int32)
-        return blur_id
-    def automatic_detect_blur(self):
-        assert self.num_of_remove< len(self.color_path_list),'too much images to move! shrink the --num_of_remove'
-
-        print('automatic detect blur image:')
-        blur_score = []
-        for img_path in tqdm(self.color_path_list):
-            img = cv2.imread(img_path)
-            gray_img = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-            var =  cv2.Laplacian(gray_img, cv2.CV_64F).var()
-            blur_score.append(var)
-        blur_score = np.asarray(blur_score)
-        blur_id_list = blur_score.argsort()[:self.num_of_remove] # 认为拉普拉斯算子的方差小的图片为blur图片
-        return blur_id_list
 
 
 def main():
@@ -82,6 +97,7 @@ def main():
     opt = sparse.opt
     print(opt)
     ds = Dataset(opt)
-    ds.remove_blur_data()
+    #ds.remove_blur_data()
+    ds.rename_dataset()
 if __name__=="__main__":
     main()
