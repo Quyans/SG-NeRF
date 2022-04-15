@@ -54,13 +54,13 @@ class Dataset:
         if(self.auto_detect):
             blur_id  = self.automatic_detect_blur()
         else:
-            print(os.path.join(self.dataset_dir,'blur_list.txt'))
-            if not os.path.exists(os.path.join(self.dataset_dir,'blur_list.txt')):
-                print("Choose Manual,but don't exists blur_list at {}".format(os.path.join(self.dataset_dir,'blur_list.txt')))
+            print(os.path.join(self.dataset_dir,'blur_img_list.txt'))
+            if not os.path.exists(os.path.join(self.dataset_dir,'blur_img_list.txt')):
+                print("Choose Manual,but don't exists blur_img_list at {}".format(os.path.join(self.dataset_dir,'blur_img_list.txt')))
                 exit()
             else:
-                print('Use manual blur_list')
-                blur_id = np.loadtxt(os.path.join(self.dataset_dir,'blur_list.txt')).astype(np.int32)
+                print('Use manual blur_img_list')
+                blur_id = np.loadtxt(os.path.join(self.dataset_dir,'blur_img_list.txt')).astype(np.int32)
         return blur_id
 
     def rename_dataset(self):
@@ -73,7 +73,7 @@ class Dataset:
             new_color_path = os.path.join(self.color_dir,'{}.jpg'.format(i))
             new_depth_path = os.path.join(self.depth_dir, '{}.png'.format(i))
             new_pose_path = os.path.join(self.pose_dir, '{}.txt'.format(i))
-            os.rename(ori_color_path,new_depth_path)
+            os.rename(ori_color_path,new_color_path)
             os.rename(ori_depth_path, new_depth_path)
             os.rename(ori_pose_path, new_pose_path)
     def remove_blur_data(self):
@@ -97,7 +97,7 @@ def main():
     opt = sparse.opt
     print(opt)
     ds = Dataset(opt)
-    #ds.remove_blur_data()
+    ds.remove_blur_data()
     ds.rename_dataset()
 if __name__=="__main__":
     main()

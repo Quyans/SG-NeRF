@@ -89,6 +89,9 @@ class ScannetFtDataset(BaseDataset):
 
     def initialize(self, opt, img_wh=[800,800], downSample=1.0, max_len=-1, norm_w2c=None, norm_c2w=None):
         self.opt = opt
+
+        self.novel_cam_trajectory = opt.novel_cam_trajectory == '1'
+
         self.data_dir = opt.data_root
         self.scan = opt.scan
         self.split = opt.split
@@ -248,6 +251,13 @@ class ScannetFtDataset(BaseDataset):
             default=(640, 480),
             help='resize target of the image'
         )
+        parser.add_argument(
+            '--novel_cam_trajectory',
+            type=int,
+            default=0,
+            help='if use novel camera trajectory to rendering ,default not!Mention that if you want to use this option,just alter the scan option at the same time ;for example train scan is scene0000_00 ,So I want to render a new cam trace ,i set this option to 1 and change scan option to scene0000_01'
+        )
+
         return parser
 
     def normalize_cam(self, w2cs, c2ws):
@@ -297,18 +307,23 @@ class ScannetFtDataset(BaseDataset):
         self.image_paths = [f for f in os.listdir(colordir) if os.path.isfile(os.path.join(colordir, f))]
         self.image_paths = [os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(i)) for i in range(len(self.image_paths))]
         self.all_id_list = self.filter_valid_id(list(range(len(self.image_paths))))
-        if len(self.all_id_list) > 2900: # neural point-based graphics' configuration
-            self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
-            self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
-        else:  # nsvf configuration->go this way in defalut train scannet
-            step=5
-            self.train_id_list = self.all_id_list[::step]
-            self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+        if not self.novel_cam_trajectory :
+            if len(self.all_id_list) > 2900: # neural point-based graphics' configuration
+                self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
+                self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
+            else:  # nsvf configuration->go this way in defalut train scannet
+                step=5
+                self.train_id_list = self.all_id_list[::step]
+                self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+        else:
+            assert self.split == "test", 'split==train! error!cant train at new camera trajectory'
+            self.test_id_list = self.all_id_list[::10]
+            self.train_id_list = []
 
         print("all_id_list",len(self.all_id_list))
         print("test_id_list",len(self.test_id_list), self.test_id_list)
         print("train_id_list",len(self.train_id_list))
-        self.train_id_list = self.remove_blurry(self.train_id_list)
+        #self.train_id_list = self.remove_blurry(self.train_id_list)
         self.id_list = self.train_id_list if self.split=="train" else self.test_id_list
         self.view_id_list=[]
 
