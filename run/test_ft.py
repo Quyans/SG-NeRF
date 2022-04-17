@@ -142,7 +142,7 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, l
     height = dataset.height
     width = dataset.width
     visualizer.reset()
-    count = 0;
+    count = 0
     for i in range(0, total_num, opt.test_num_step): # 1 if test_steps == 10000 else opt.test_num_step
         data = dataset.get_item(i)
         raydir = data['raydir'].clone()
@@ -294,9 +294,6 @@ def main():
     img_lst=None
     with torch.no_grad():
         print(opt.checkpoints_dir + opt.name + "/*_net_ray_marching.pth")
-        if opt.bgmodel.endswith("plane"):
-            _, _, _, _, _, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst = gen_points_filter_embeddings(train_dataset, visualizer, opt)
-
         resume_dir = os.path.join(opt.checkpoints_dir, opt.name)
         if opt.resume_iter == "best":
             opt.resume_iter = "latest"

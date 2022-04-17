@@ -5,7 +5,7 @@ nrDataRoot="../data_src"
 name='scene000-RmBlur_nv_1'
 resume_iter="best" #latest
 data_root="${nrDataRoot}/scannet/scans/"
-scan="scene0000_01" # camera view i want to rendering
+scan="scene0000_00" # camera view i want to rendering
 normview=0
 edge_filter=10 # pixels crop out at image edge
 point_conf_mode="1" # 0 for only at features, 1 for multi at weight
@@ -26,7 +26,7 @@ query_size=" 3 3 3 "
 vsize=" 0.008 0.008 0.008 " #" 0.005 0.005 0.005 "
 wcoord_query=1
 z_depth_dim=400
-max_o=2000000
+max_o=610000
 ranges=" -10.0 -10.0 -10.0 10.0 10.0 10.0 "
 SR=24
 K=8
@@ -34,6 +34,7 @@ P=30
 NN=2
 
 act_type="LeakyReLU"
+
 agg_intrp_order=2
 agg_distance_kernel="linear" #"avg" #"feat_intrp"
 point_features_dim=32
@@ -72,7 +73,7 @@ num_pos_freqs=10
 num_viewdir_freqs=4 #6
 
 random_sample='random'
-random_sample_size=56 # 32 * 32 = 1024
+random_sample_size=28 # 32 * 32 = 1024
 batch_size=1
 
 gpu_ids='0'
@@ -86,7 +87,7 @@ color_loss_items='ray_masked_coarse_raycolor ray_miss_coarse_raycolor coarse_ray
 test_color_loss_items='coarse_raycolor ray_miss_coarse_raycolor ray_masked_coarse_raycolor'
 
 bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
-split="train"
+split="test"
 
 cd run
 
