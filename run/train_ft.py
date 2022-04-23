@@ -645,14 +645,14 @@ def main():
         else:#no exsist _net_ray_marching,from MVSNET to generate point feature
             load_points = opt.load_points#2
             opt.is_train = False
-            opt.mode = 1
+            opt.mode = 1# 初始时候0
             opt.load_points = 0
             model = create_model(opt)
             model.setup(opt)
             model.eval()
-            if load_points in [1,3]:#False
+            if load_points in [1,3]:#True,load point = 1
                 points_xyz_all = train_dataset.load_init_points()
-            if load_points == 2:#True
+            if load_points == 2:#False
                 points_xyz_all = train_dataset.load_init_depth_points(device="cuda", vox_res=100)
             if load_points == 3:#False
                 depth_xyz_all = train_dataset.load_init_depth_points(device="cuda", vox_res=80)#重建深度图
@@ -699,7 +699,7 @@ def main():
 
 
 
-            if opt.resample_pnts > 0:
+            if opt.resample_pnts > 0:#False
                 if opt.resample_pnts == 1:
                     print("points_xyz_all",points_xyz_all.shape)
                     inds = torch.min(torch.norm(points_xyz_all, dim=-1, keepdim=True), dim=0)[1] # use the point closest to the origin

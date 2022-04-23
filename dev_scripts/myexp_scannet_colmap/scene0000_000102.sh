@@ -2,12 +2,12 @@
 
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='scene000'
+name='9-scene000-colmap-crossseq'
 
 resume_iter=best #latest
 
 data_root="${nrDataRoot}/scannet/scans/"
-scan="scene0000_00"
+scan="scene0000_000102-T-blur"
 
 load_points=1
 feat_grad=1

@@ -88,11 +88,11 @@ class RefineNet(nn.Module):
 class MVSNet(nn.Module):
     def __init__(self, refine=False):
         super(MVSNet, self).__init__()
-        self.refine = refine
+        self.refine = refine# False
 
-        self.feature = FeatureNet()
-        self.cost_regularization = CostRegNet()
-        if self.refine:
+        self.feature = FeatureNet()#2D-feature extration
+        self.cost_regularization = CostRegNet()#3D-UNET
+        if self.refine:#NOP
             self.refine_network = RefineNet()
 
     def forward(self, imgs, proj_matrices, depth_values, features=None, prob_only=False):

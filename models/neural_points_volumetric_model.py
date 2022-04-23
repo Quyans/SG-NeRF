@@ -318,7 +318,7 @@ class NeuralPointsRayMarching(nn.Module):
                 blend_weight,#blend_weight[1,784,24,1]
                 background_transmission,#background_transmission[1,784,1]
                 _,
-            ) = ray_march(ray_dist, ray_valid, decoded_features, self.render_func, self.blend_func, bg_color)
+            ) = ray_march(ray_dist, ray_valid, decoded_features, self.render_func, self.blend_func, bg_color)#Volume rendering，体渲染
             ray_color = self.tone_map(ray_color)# do nothing
             output["coarse_raycolor"] = ray_color#point_color[1,784,24,3]
             output["coarse_point_opacity"] = opacity#opacity[1,784,24]

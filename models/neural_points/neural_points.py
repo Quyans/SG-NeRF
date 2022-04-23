@@ -407,13 +407,14 @@ class NeuralPoints(nn.Module):
             points_embeding = points_embeding[..., :self.opt.point_features_dim]
         if self.opt.default_conf > 0.0 and self.opt.default_conf <= 1.0 and points_conf is not None:
             points_conf = torch.ones_like(points_conf) * self.opt.default_conf
+        #默认参数全是1全会回归啊啊啊
         if parameter:
-            self.xyz = nn.Parameter(points_xyz)
+            self.xyz = nn.Parameter(points_xyz)#不会对点云做grad
             self.xyz.requires_grad = self.opt.xyz_grad > 0
 
             if points_conf is not None:
                 points_conf = nn.Parameter(points_conf)
-                points_conf.requires_grad = self.opt.conf_grad > 0
+                points_conf.requires_grad = self.opt.conf_grad > 0#yes
                 if "0" in list(self.opt.point_conf_mode):
                     points_embeding = torch.cat([points_conf, points_embeding], dim=-1)
                 if "1" in list(self.opt.point_conf_mode):

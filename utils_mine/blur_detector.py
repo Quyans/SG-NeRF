@@ -10,6 +10,7 @@ from tqdm import tqdm
 README:
 1. 处理的是scannet这个数据集，文件组织遵循point-nerf；
 2. warning: 采取的是原数据集中直接删除blur图片的做法！！！！一定请备份数据集
+3.手动的blur_img_list.txt放在exported下
 '''
 class Options:
     def __init__(self):
@@ -18,9 +19,9 @@ class Options:
     def parse(self):
         parser = argparse.ArgumentParser(description="Demo of argparse")
         parser.add_argument('--data_root',type=str, default='/home/slam/devdata/pointnerf/data_src/scannet/scans',help='root of dataset')
-        parser.add_argument('--scan',type=str, default='scene0000_00-T-blur',help='room which to scan')
+        parser.add_argument('--scan',type=str, default='scene0000_000102-T-blur',help='room which to scan')
         parser.add_argument('--auto_or_manual', type=str, default='1', help='0:auto to detect blur;1:manual to detect blur')
-        parser.add_argument('--num_of_remove', type=str, default='150', help='set how may blur image to be remove')
+        parser.add_argument('--num_of_remove', type=str, default='150', help='set how may blur image to be remove if use automatic')
         self.opt = parser.parse_args()
         self.opt.dataset_dir = os.path.join(self.opt.data_root,self.opt.scan,'exported')
         # print(self.opt.dataset_dir)
@@ -55,34 +56,38 @@ class Dataset:
             blur_id  = self.automatic_detect_blur()
         else:
             print(os.path.join(self.dataset_dir,'blur_img_list.txt'))
-            if not os.path.exists(os.path.join(self.dataset_dir,'blur_img_list.txt')):
-                print("Choose Manual,but don't exists blur_img_list at {}".format(os.path.join(self.dataset_dir,'blur_img_list.txt')))
-                exit()
-            else:
-                print('Use manual blur_img_list')
-                blur_id = np.loadtxt(os.path.join(self.dataset_dir,'blur_img_list.txt')).astype(np.int32)
+            assert os.path.exists(os.path.join(self.dataset_dir,'blur_img_list.txt')),"Choose Manual,but don't exists blur_img_list at {}".format(os.path.join(self.dataset_dir,'blur_img_list.txt'))
+            print('Use manual blur_img_list')
+            blur_id = np.loadtxt(os.path.join(self.dataset_dir,'blur_img_list.txt')).astype(np.int32)
         return blur_id
 
     def rename_dataset(self):
         # After remove blur images,we need to rename every sequence one by one
         self.not_blur_list = [id for id in self.all_id_list if id not in self.blur_id_list]
+
         for i in tqdm(range(len(self.not_blur_list))):
-            ori_color_path = os.path.join(self.color_dir,'{}.jpg'.format(self.not_blur_list[i]))
-            ori_depth_path = os.path.join(self.depth_dir, '{}.png'.format(self.not_blur_list[i]))
-            ori_pose_path = os.path.join(self.pose_dir, '{}.txt'.format(self.not_blur_list[i]))
-            new_color_path = os.path.join(self.color_dir,'{}.jpg'.format(i))
-            new_depth_path = os.path.join(self.depth_dir, '{}.png'.format(i))
-            new_pose_path = os.path.join(self.pose_dir, '{}.txt'.format(i))
-            os.rename(ori_color_path,new_color_path)
-            os.rename(ori_depth_path, new_depth_path)
-            os.rename(ori_pose_path, new_pose_path)
+                ori_color_path = os.path.join(self.color_dir,'{}.jpg'.format(self.not_blur_list[i]))
+                ori_depth_path = os.path.join(self.depth_dir, '{}.png'.format(self.not_blur_list[i]))
+                ori_pose_path = os.path.join(self.pose_dir, '{}.txt'.format(self.not_blur_list[i]))
+                new_color_path = os.path.join(self.color_dir,'{}.jpg'.format(i))
+                new_depth_path = os.path.join(self.depth_dir, '{}.png'.format(i))
+                new_pose_path = os.path.join(self.pose_dir, '{}.txt'.format(i))
+                os.rename(ori_color_path,new_color_path)
+                os.rename(ori_depth_path, new_depth_path)
+                os.rename(ori_pose_path, new_pose_path)
     def remove_blur_data(self):
         print('data to remove:\n',self.blur_id_list)
         print('Removing blur data')
         self.blur_color_path_list = []
         self.blur_depth_path_list = []
         self.blur_pose_path_list = []
-        for id in tqdm(self.blur_id_list):
+        blur_id_list = self.blur_id_list
+        self.blur_id_list = []
+        for itm in blur_id_list:
+            if itm not in self.blur_id_list:
+                self.blur_id_list.append(itm)
+        assert len(self.blur_id_list) == len((set(self.blur_id_list))), 'Has repeatly itm,check it !'
+        for id in tqdm(list(self.blur_id_list)):
             color_path = os.path.join(self.color_dir,'{}.jpg'.format(id))
             depth_path = os.path.join(self.depth_dir, '{}.png'.format(id))
             pose_path = os.path.join(self.pose_dir, '{}.txt'.format(id))

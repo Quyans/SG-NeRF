@@ -19,8 +19,8 @@ class Options:
         self.parse()
     def parse(self):
         parser = argparse.ArgumentParser(description="Demo of argparse")
-        parser.add_argument('--data_root',type=str, default='/home/slam/devdata/pointnerf/checkpoints/scannet/5-scene000-colmap_rmBlur4000',help='root of rendering result(It is probably in checkpoints file)')
-        parser.add_argument('--unit',type=str, default='iter',choices=['iter','pose'],help='how to generate video,iter means show the fist pic every several iters,pose mean show the latest iter every camera poss')
+        parser.add_argument('--data_root',type=str, default='/home/slam/devdata/pointnerf/checkpoints/scannet/scene000-edit-center_sofa_removed',help='root of rendering result(It is probably in checkpoints file)')
+        parser.add_argument('--unit',type=str, default='pose',choices=['iter','pose'],help='how to generate video,iter means show the fist pic every several iters,pose mean show the latest iter every camera poss')
         #parser.add_argument('--num_iter', type=int,default=10000,help='n iter you want to generator')
         parser.add_argument('--video_format', type=str, default='gif',choices=['mp4','gif','mov'],help='video format')
         parser.add_argument('--fps', type=int, default=20,help='frame per second of video')

@@ -318,9 +318,10 @@ class ScannetFtDataset(BaseDataset):
         else:
             assert self.split == "test", 'split==train! error!cant train at new camera trajectory'
             print("Novel camera trajectory rendering")
-            self.test_id_list = self.all_id_list[::10]
+            # self.test_id_list = self.all_id_list[::10]
+            # self.train_id_list = []
+            self.test_id_list = self.all_id_list[1850:3260]
             self.train_id_list = []
-
         print("all_id_list",len(self.all_id_list))
         print("test_id_list",len(self.test_id_list), self.test_id_list)
         print("train_id_list",len(self.train_id_list))
@@ -407,7 +408,7 @@ class ScannetFtDataset(BaseDataset):
         ply = PlyData([PlyElement.describe(vertices, 'vertex')], text=False)
         ply.write(points_path)
 
-    #！！没看
+    #！！读point cloud 数据
     def load_init_points(self):
         points_path = os.path.join(self.data_dir, self.scan, "exported/pcd.ply")
         # points_path = os.path.join(self.data_dir, self.scan, "exported/pcd_te_1_vs_0.01_jit.ply")
@@ -485,7 +486,7 @@ class ScannetFtDataset(BaseDataset):
     def normalize_rgb(self, data):
         # to unnormalize image for visualization
         # data C, H, W
-        C, H, W = data.shape
+        C, H, W = data.shapepoint_color_mode
         mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
         std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
         return (data - mean) / std

@@ -36,7 +36,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
 
 
     def create_network_models(self, opt):
-        if opt.mode != 2:
+        if opt.mode != 2:#mode ==2:only pointnerf
             self.net_mvs = MvsPointsModel(opt).to(self.device)
             self.model_names = ['mvs']
 
@@ -122,11 +122,11 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
 
 
     def forward(self):
-        if self.opt.mode != 2:#False
+        if self.opt.mode != 2:#False，colmap不是靠mvs来做深度估计、点云估计
             points_xyz, points_embedding, points_colors, points_dirs, points_conf = self.net_mvs(self.input)
             # print("volume_feature", volume_feature.shape)
             self.neural_points.set_points(points_xyz, points_embedding, points_color=points_colors, points_dir=points_dirs, points_conf=points_conf, parameter=self.opt.feedforward==0) # if feedforward, no neural points optimization
-        self.output = self.run_network_models()
+        self.output = self.run_network_models()#colmap go this way
         if "depths_h" in self.input:
             depth_gt = self.input["depths_h"][:,self.opt.trgt_id,...] if self.input["depths_h"].dim() > 3 else self.input["depths_h"]
             self.output["ray_depth_mask"] = depth_gt > 0
@@ -169,7 +169,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
         self.top_ray_miss_ids = torch.arange(self.num_probe + 1, dtype=torch.int32, device=self.device)
 
     def set_points(self, points_xyz, points_embedding, points_color=None, points_dir=None, points_conf=None, Rw2c=None, eulers=None, editing=False):
-        if not editing:
+        if not editing:#True
             self.neural_points.set_points(points_xyz, points_embedding, points_color=points_color, points_dir=points_dir, points_conf=points_conf, parameter=self.opt.feedforward == 0, Rw2c=Rw2c, eulers=eulers)
         else:
             self.neural_points.editing_set_points(points_xyz, points_embedding, points_color=points_color, points_dir=points_dir, points_conf=points_conf, parameter=self.opt.feedforward == 0, Rw2c=Rw2c, eulers=eulers)
