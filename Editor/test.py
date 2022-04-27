@@ -37,41 +37,51 @@ def main():
     sparse = Options()
     opt = sparse.opt
     print(opt)
-    '''
-    测试从checkpoints转ply
-    '''
-    # cpc = CheckpointsController(opt)
-    # neural_pcd = cpc.load_checkpoints_as_nerualpcd()
-    # neural_pcd.save_as_ply('origin_save')
-    '''
-    测试读ply:这一步中间，用mesh手抠一个物体，命名为sofa_meshlabpcd.ply~！~！~！~！~！~！~！~！
-    '''
-    scene_npcd = Neural_pointcloud(opt)
-    scene_npcd.load_from_ply('origin_save')
+    # '''
+    # 测试从checkpoints转ply
+    # '''
+    # # cpc = CheckpointsController(opt)
+    # # neural_pcd = cpc.load_checkpoints_as_nerualpcd()
+    # # neural_pcd.save_as_ply('origin_save')
+    # '''
+    # 测试读ply:这一步中间，用mesh手抠一个物体，命名为sofa_meshlabpcd.ply~！~！~！~！~！~！~！~！
+    # '''
+    # scene_npcd = Neural_pointcloud(opt)
+    # scene_npcd.load_from_ply('origin_save')
     # '''
     # 测试从meshlab cropped后在带feature的点云中找
     # '''
-    object_mpcd = Meshlab_pointcloud(opt)
-    object_mpcd.load_from_meshlabfile("bag")
-    object_npcd = object_mpcd.meshlabpcd2neuralpcd(scene_npcd)
-    object_npcd.save_as_ply('bag')
-    # '''
-    # 测试editor crop方法
-    # '''
-    scene_npcd = Neural_pointcloud(opt)
-    scene_npcd.load_from_ply('origin_save')
-    object_npcd = Neural_pointcloud(opt)
-    object_npcd.load_from_ply('bag')
-    pce = PointCloudEditor(opt)
-    npcd_cropped = pce.crop_point_cloud(object_npcd,scene_npcd)
-    npcd_cropped.save_as_ply('bag')
-    # '''
-    # 测试将neural point cloud 写回 checkpoints
-    # '''
-    crop_npcd = Neural_pointcloud(opt)
-    crop_npcd.load_from_ply('bag')#'nosofa'
+    # object_mpcd = Meshlab_pointcloud(opt)
+    # object_mpcd.load_from_meshlabfile("bag")
+    # object_npcd = object_mpcd.meshlabpcd2neuralpcd(scene_npcd)
+    # object_npcd.save_as_ply('bag')
+    '''
+    测试editor crop方法
+    '''
+    # scene_npcd = Neural_pointcloud(opt)
+    # scene_npcd.load_from_ply('origin_save')
+    # object_npcd = Neural_pointcloud(opt)
+    # object_npcd.load_from_ply('bag')
+    # pce = PointCloudEditor(opt)
+    # npcd_cropped = pce.crop_point_cloud(object_npcd,scene_npcd)
+    # npcd_cropped.save_as_ply('bag')
+
+    '''
+    测试将neural point cloud 写回 checkpoints
+    '''
+    # sofa_npcd = Neural_pointcloud(opt)
+    # sofa_npcd.load_from_ply('sofa')#'nosofa'
+    # scene_npcd = Neural_pointcloud(opt)
+    # scene_npcd.load_from_ply('nosofa')  # 'nosofa'
+    # pce = PointCloudEditor(opt)
+    # transMatrix = np.array([[-1,0,0,-1],[0,-1,0,-3],[0,0,1,0],[0,0,0,1]])
+    # transed_sofa = pce.translation_point_cloud_local(sofa_npcd,transMatrix)
+    # new_scene = pce.add_point_cloud(transed_sofa,scene_npcd)
+    # new_scene.save_as_ply('sofa_trans_scene')
+    new_scene = Neural_pointcloud(opt)
+    new_scene.load_from_ply('sofa_trans_scene')
     cpc = CheckpointsController(opt)
-    cpc.save_checkpoints_from_neuralpcd(crop_npcd,'bag')
+    cpc.save_checkpoints_from_neuralpcd(new_scene,'edit-sofa-trans')
 if __name__=="__main__":
     main()
     print('~finish~')

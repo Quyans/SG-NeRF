@@ -27,7 +27,6 @@ class PointCloudEditor:
         npc = Neural_pointcloud(self.opt)
         pointsize_child =npcd_child.xyz.shape[0]
         pointsize_father = npcd_father.xyz.shape[0]
-
         neural_xyz = np.empty([pointsize_father,3])
         neural_color = np.empty([pointsize_father,3])
         neural_embeding = np.empty([pointsize_father,32])
@@ -54,32 +53,33 @@ class PointCloudEditor:
         print('\ncrop done...neural point cloud scale:',idx)
         npc.load_from_var(neural_xyz,neural_embeding,neural_conf,neural_dir,neural_color)
         return npc
-
-
-# class Visualizer:
-#     def __init__(self):
-#         self.NeuralPoint = None
-#     def set_input(self,NeuralPoint):
-#         self.NeuralPoint = NeuralPoint
-#     def visualize(self):
-#         assert self.NeuralPoint is not None,'Plz initialize before visualize'
-#         pcd = o3d.geometry.PointCloud()
-#         pcd.points = o3d.utility.Vector3dVector(self.NeuralPoint.xyz)
-#         pcd.colors = o3d.utility.Vector3dVector(self.NeuralPoint.color)
-#         o3d.visualization.draw_geometries_with_vertex_selection([pcd])
-#
-# def main():
-#     sparse = Options()
-#     opt = sparse.opt
-#     print(opt)
-#     # cpl = CheckpointsLoader(opt)
-#     # points_xyz,points_embeding,points_conf,points_dir,points_color = cpl.load_checkpoints()
-#     # cpl.save_checkpoints_as_ply()
-#
-#
-#
-#     # vis = Visualizer()
-#     # vis.set_input(nptr_scene)
-#     # vis.visualize()
-# if __name__=="__main__":
-#     main()
+    def translation_point_cloud_global(self,npcd, transMatirx):#rotate by world coordinate
+        res_npc = Neural_pointcloud(self.opt)
+        rot_matrix = transMatirx[:3, :3]
+        trans_vector = transMatirx[:3, 3]
+        res_npc.xyz = npcd.xyz @ rot_matrix + trans_vector
+        res_npc.color = npcd.color
+        res_npc.embeding = npcd.embeding
+        res_npc.conf = npcd.conf
+        res_npc.dir = npcd.dir
+        return res_npc
+    def translation_point_cloud_local(self,npcd,transMatirx):#rotate by self coordinate
+        pointsize = npcd.xyz.shape[0]
+        centerptr = np.sum(npcd.xyz,axis=0)/pointsize
+        res_npc = Neural_pointcloud(self.opt)
+        rot_matrix = transMatirx[:3, :3]
+        trans_vector = transMatirx[:3, 3]
+        res_npc.xyz = (npcd.xyz-centerptr) @ rot_matrix + trans_vector + centerptr
+        res_npc.color = npcd.color
+        res_npc.embeding = npcd.embeding
+        res_npc.conf = npcd.conf
+        res_npc.dir = npcd.dir
+        return res_npc
+    def add_point_cloud(self,npcd_child,npcd_father):
+        res_npc = Neural_pointcloud(self.opt)
+        res_npc.xyz = np.concatenate((npcd_child.xyz,npcd_father.xyz),axis = 0)
+        res_npc.color = np.concatenate((npcd_child.color, npcd_father.color), axis=0)
+        res_npc.embeding = np.concatenate((npcd_child.embeding, npcd_father.embeding), axis=0)
+        res_npc.conf = np.concatenate((npcd_child.conf, npcd_father.conf), axis=0)
+        res_npc.dir = np.concatenate((npcd_child.dir, npcd_father.dir), axis=0)
+        return res_npc

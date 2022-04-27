@@ -2,12 +2,12 @@
 
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='scene000'
+name='10-scene000-colmap_remrBlur4000_final'
 
 resume_iter=best #latest
 
 data_root="${nrDataRoot}/scannet/scans/"
-scan="scene0000_00"
+scan="scene0000_00-T-blur"
 
 load_points=1
 feat_grad=1
@@ -57,7 +57,7 @@ max_o=610000
 ranges=" -10.0 -10.0 -10.0 10.0 10.0 10.0 "
 SR=24
 K=8
-P=28
+P=32
 NN=2
 
 act_type="LeakyReLU"
