@@ -231,17 +231,17 @@ class MvsPointsModel(nn.Module):
         points_colors = None
         for feat_str in getattr(self.args, feature_str_lst[cam_vid]):
             if feat_str.startswith("imgfeat"):#True
-                _, view_ids, layer_ids = feat_str.split("_")
+                _, view_ids, layer_ids = feat_str.split("_")#img_feat_0_0123:view_ids 0;later_ids:123
                 view_ids = [int(a) for a in list(view_ids)]
                 layer_ids = [int(a) for a in list(layer_ids)]
                 twoD_feats, points_colors = self.extract_2d(img_feats, view_ids, layer_ids, intrinsics, c2ws, w2cs, cam_xyz, HD, WD, cam_vid=cam_vid)
                 points_embedding.append(twoD_feats)
-            elif feat_str.startswith("dir"):
+            elif feat_str.startswith("dir"):#dir_0
                 _, view_ids = feat_str.split("_")
-                view_ids = torch.as_tensor([int(a) for a in list(view_ids)], dtype=torch.int64, device=cam_xyz.device)
-                cam_pos_world = c2ws[:, view_ids, :, 3] # B, V, 4
-                cam_trans = w2cs[:, cam_vid, ...] # B, 4, 4
-                cam_pos_cam = (cam_pos_world @ cam_trans.transpose(1, 2))[...,:3] # B, V, 4
+                view_ids = torch.as_tensor([int(a) for a in list(view_ids)], dtype=torch.int64, device=cam_xyz.device)#[0]
+                cam_pos_world = c2ws[:, view_ids, :, 3] # B, V, 4;translation,style like [x,y,z,1]
+                cam_trans = w2cs[:, cam_vid, ...] # B, 4, 4; 4by4 translation matrix style like [[1,0,0,x],[0,1,0,y],[0,0,1,z],[0,0,0,1]]
+                cam_pos_cam = (cam_pos_world @ cam_trans.transpose(1, 2))[...,:3] # B, V, 4，主相机坐标系下的各个camera center，main camera[0,0,0]
                 points_dirs = cam_xyz[:,:, None, :] - cam_pos_cam[:, None, :, :] # B, N, V, 3 in current cam coord
                 points_dirs = points_dirs / (torch.linalg.norm(points_dirs, dim=-1, keepdims=True) + 1e-6)  # B, N, V, 3
                 points_dirs = points_dirs.view(cam_xyz.shape[0], -1, 3) @ c2ws[:, cam_vid, :3, :3].transpose(1, 2)

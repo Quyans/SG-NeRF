@@ -224,7 +224,7 @@ class BaseRenderingModel(BaseModel):
         self.loss_names = ['total']
         if not opt.color_loss_items:
             self.add_default_color_losses(opt)
-        if len(opt.color_loss_weights) != 1 and len(
+        if len(opt.color_loss_weights) != 1 and len(    #not in
                 opt.color_loss_weights) != len(opt.color_loss_items):
             print(fmt.RED + "color_loss_weights does not match loss items" +
                   fmt.END)
@@ -327,9 +327,9 @@ class BaseRenderingModel(BaseModel):
 
         self.check_setup_renderFunc_channels(opt)
 
-        self.blend_func = find_blend_function(opt.which_blend_func)
-        self.raygen_func = find_ray_generation_method(opt.which_ray_generation)
-        self.tonemap_func = find_tone_map(opt.which_tonemap_func)
+        self.blend_func = find_blend_function(opt.which_blend_func)#alpha blend
+        self.raygen_func = find_ray_generation_method(opt.which_ray_generation)#near_far_linear_ray
+        self.tonemap_func = find_tone_map(opt.which_tonemap_func)#no_tone_map
 
         self.found_funcs = {}
         add_property2dict(
@@ -418,7 +418,7 @@ class BaseRenderingModel(BaseModel):
             the function is often used by subclasses when creating rendering networks.
         '''
 
-        self.render_func = find_render_function(opt.which_render_func)
+        self.render_func = find_render_function(opt.which_render_func)# radiance
 
         if opt.which_render_func == 'radiance':
             if opt.out_channels is None:
@@ -446,7 +446,7 @@ class BaseRenderingModel(BaseModel):
         else:
             if opt.out_channels is None:
                 opt.out_channels = 8
-        self.out_channels = opt.out_channels
+        self.out_channels = opt.out_channels#4
 
     def check_getDecoder(self, opt, **kwargs):
         '''construct a decoder; this is often used by subclasses when creating networks.'''

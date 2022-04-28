@@ -2,7 +2,7 @@
 
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='12-scene0113'
+name='13-scene0113-rotationinvariance'
 
 resume_iter=best #latest
 
@@ -12,7 +12,7 @@ scan="scene0113_00"
 load_points=1
 feat_grad=1
 conf_grad=1
-dir_grad=1
+dir_grad=0
 color_grad=1
 vox_res=900
 normview=0
@@ -72,7 +72,8 @@ apply_pnt_mask=1
 shading_feature_mlp_layer0=1 #2
 shading_feature_mlp_layer1=2 #2
 shading_feature_mlp_layer2=0 #1
-shading_feature_mlp_layer3=2 #1
+shading_feature_mlp_layer3=0 #1
+shading_feature_mlp_layer4=1 #1
 shading_alpha_mlp_layer=1
 shading_color_mlp_layer=4
 shading_feature_num=256
@@ -125,7 +126,7 @@ train_and_test=0 #1
 test_num=25
 test_freq=50000 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=100
-test_num_step=2
+test_num_step=50
 
 prob_freq=10001 #10001
 prob_num_step=100
@@ -224,6 +225,7 @@ python3 train_ft.py \
         --shading_feature_mlp_layer1 $shading_feature_mlp_layer1 \
         --shading_feature_mlp_layer2 $shading_feature_mlp_layer2 \
         --shading_feature_mlp_layer3 $shading_feature_mlp_layer3 \
+        --shading_feature_mlp_layer4 $shading_feature_mlp_layer4 \
         --shading_feature_num $shading_feature_num \
         --dist_xyz_freq $dist_xyz_freq \
         --shpnt_jitter $shpnt_jitter \

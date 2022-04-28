@@ -8,7 +8,7 @@ def find_ray_generation_method(name):
     assert isinstance(name, str), 'ray generation method name must be string'
     if name == 'cube':
         return cube_ray_generation
-    elif name == 'near_far_linear':
+    elif name == 'near_far_linear':# go this
         return near_far_linear_ray_generation
     elif name == 'near_far_disparity_linear':
         return near_far_disparity_linear_ray_generation

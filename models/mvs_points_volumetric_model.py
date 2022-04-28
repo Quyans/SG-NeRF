@@ -72,7 +72,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
         self.mvs_params = mvs_params
         mvs_lr = opt.mvs_lr if opt.mvs_lr is not None else opt.lr
 
-        if len(mvs_params) > 0:
+        if len(mvs_params) > 0:#nop
             self.mvs_optimizer = torch.optim.Adam(mvs_params,
                                               lr=mvs_lr,
                                               betas=(0.9, 0.999))

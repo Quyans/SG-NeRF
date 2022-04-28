@@ -164,7 +164,7 @@ class NeuralPoints(nn.Module):
         parser.add_argument(
             '--dir_grad',
             type=int,
-            default=1,
+            default=0,
             help=
             'vscale is the block size that store several voxels'
         )
@@ -273,19 +273,18 @@ class NeuralPoints(nn.Module):
             # filepath = "./aaaaaaaaaaaaa_cloud.txt"
             # np.savetxt(filepath, self.xyz.reshape(-1, 3).detach().cpu().numpy(), delimiter=";")
 
-            if checkpoint:
+            if checkpoint:#谁要学，nn.par谁，反正都存pth里面，这个实现方式还是不错的
                 self.points_embeding = nn.Parameter(saved_features["neural_points.points_embeding"]) if "neural_points.points_embeding" in saved_features else None
                 print("self.points_embeding", self.points_embeding.shape)
                 # points_conf = saved_features["neural_points.points_conf"] if "neural_points.points_conf" in saved_features else None
                 # if self.opt.default_conf > 0.0 and points_conf is not None:
                 #     points_conf = torch.ones_like(points_conf) * self.opt.default_conf
                 # self.points_conf = nn.Parameter(points_conf) if points_conf is not None else None
-
                 self.points_conf = nn.Parameter(saved_features["neural_points.points_conf"]) if "neural_points.points_conf" in saved_features else None
                 # print("self.points_conf",self.points_conf)
 
-                self.points_dir = nn.Parameter(saved_features["neural_points.points_dir"]) if "neural_points.points_dir" in saved_features else None
-                self.points_color = nn.Parameter(saved_features["neural_points.points_color"]) if "neural_points.points_color" in saved_features else None
+                self.points_dir = nn.Parameter(saved_features["neural_points.points_dir"]) if "neural_points.points_dir" in saved_features else None # None
+                self.points_color = nn.Parameter(saved_features["neural_points.points_color"]) if "neural_points.points_color" in saved_features else None # None
                 self.eulers = nn.Parameter(saved_features["neural_points.eulers"]) if "neural_points.eulers" in saved_features else None
                 self.Rw2c = nn.Parameter(saved_features["neural_points.Rw2c"]) if "neural_points.Rw2c" in saved_features else torch.eye(3, device=self.xyz.device, dtype=self.xyz.dtype)
             else:
