@@ -2,7 +2,7 @@
 
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='13-scene0113-rotationinvariance'
+name='12-scene0113-default'
 
 resume_iter=best #latest
 

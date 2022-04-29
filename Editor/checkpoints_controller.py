@@ -48,5 +48,5 @@ class CheckpointsController:
         network_paras["neural_points.points_conf"] =  torch.unsqueeze(torch.Tensor(neural_pcd.conf[...,np.newaxis]),dim=0)#[1,ptr,1]
         network_paras["neural_points.points_dir"] = torch.unsqueeze(torch.Tensor(neural_pcd.dir),dim=0)#[1,ptr,3]
         network_paras["neural_points.points_color"] = torch.unsqueeze(torch.Tensor(neural_pcd.color),dim=0) #[1,ptr,3]
-        torch.save(network_paras,os.path.join(self.checkpoints_root,self.latest_iters+'_net_ray_marching_Edited_'+name+'.pth'))# find the latest pth file)
+        torch.save(network_paras,os.path.join(self.checkpoints_root,'edit','pthfile',self.latest_iters+'_net_ray_marching_Edited_'+name+'.pth'))# find the latest pth file)
         print('Saving checkpoints done')
