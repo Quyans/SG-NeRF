@@ -1,10 +1,10 @@
 #!/bin/bash
-
+novel_cam_trajectory="1"
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='00-t'
+name='17-scene0113-rotationinvariance_denseview_edit'
 
-resume_iter=200000 # 20000 #latest
+resume_iter=latest # 20000 #latest
 data_root="${nrDataRoot}/scannet/scans/"
 scan="scene0113_00"
 normview=0
@@ -34,14 +34,10 @@ SR=24
 K=8
 P=26
 NN=2
-
-
 act_type="LeakyReLU"
 
 agg_intrp_order=2
 agg_distance_kernel="linear" #"avg" #"feat_intrp"
-weight_xyz_freq=2
-weight_feat_dim=8
 
 point_features_dim=32
 shpnt_jitter="passfunc" #"uniform" # uniform gaussian
@@ -84,11 +80,7 @@ random_sample_size=56 # 32 * 32 = 1024
 
 batch_size=1
 
-plr=0.002
-lr=0.0005 # 0.0005 #0.00015
-lr_policy="iter_exponential_decay"
-lr_decay_iters=1000000
-lr_decay_exp=0.1
+
 
 gpu_ids='0'
 
@@ -183,4 +175,5 @@ python3 test_ft.py \
         --z_depth_dim $z_depth_dim \
         --max_o $max_o \
         --query_size $query_size \
-        --debug
+        --debug \
+        --novel_cam_trajectory novel_cam_trajectory

@@ -242,6 +242,7 @@ class NeuralPoints(nn.Module):
             saved_features = None
             if checkpoint:
                 saved_features = torch.load(checkpoint, map_location=device)
+
             if saved_features is not None and "neural_points.xyz" in saved_features:#true
                 self.xyz = nn.Parameter(saved_features["neural_points.xyz"])
             else:
