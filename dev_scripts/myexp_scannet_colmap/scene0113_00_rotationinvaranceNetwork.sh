@@ -2,7 +2,7 @@
 
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='16-scene0113-rotationinvariance_denseview'
+name='18-scene0113-clockwiseangle_denseview'
 
 resume_iter=best #latest
 
@@ -13,7 +13,7 @@ load_points=1
 feat_grad=1
 conf_grad=1
 dir_grad=0
-color_grad=1
+color_grad=0
 vox_res=900
 normview=0
 prune_thresh=0.1
@@ -55,9 +55,9 @@ wcoord_query=1
 z_depth_dim=400
 max_o=610000
 ranges=" -10.0 -10.0 -10.0 10.0 10.0 10.0 "
-SR=24
+SR=20 # 24
 K=8
-P=32
+P=28 # 32
 NN=2
 
 act_type="LeakyReLU"
@@ -72,6 +72,7 @@ apply_pnt_mask=1
 shading_feature_mlp_layer0=1
 shading_feature_mlp_layer1=2
 shading_feature_mlp_layer2=0
+shading_feature_mlp_linear=1
 shading_feature_mlp_layer3=0 #1
 shading_feature_mlp_layer4=1 #0
 shading_alpha_mlp_layer=1
@@ -101,7 +102,7 @@ num_pos_freqs=10
 num_viewdir_freqs=4 #6
 
 random_sample='random'
-random_sample_size=32 # 32 * 32 = 1024
+random_sample_size=26 # 32 * 32 = 1024
 batch_size=1
 
 plr=0.002
@@ -116,7 +117,7 @@ resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
 save_iter_freq=5000
 save_point_freq=10000 #301840 #1
-maximum_step=1000000 #500000 #250000 #800000
+maximum_step=500000 #500000 #250000 #800000
 
 niter=10000 #1000000
 niter_decay=10000 #250000
@@ -226,6 +227,7 @@ python3 train_ft.py \
         --shading_feature_mlp_layer2 $shading_feature_mlp_layer2 \
         --shading_feature_mlp_layer3 $shading_feature_mlp_layer3 \
         --shading_feature_mlp_layer4 $shading_feature_mlp_layer4 \
+        --shading_feature_mlp_linear $shading_feature_mlp_linear \
         --shading_feature_num $shading_feature_num \
         --dist_xyz_freq $dist_xyz_freq \
         --shpnt_jitter $shpnt_jitter \

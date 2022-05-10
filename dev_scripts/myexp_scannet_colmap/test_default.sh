@@ -176,4 +176,4 @@ python3 test_ft.py \
         --max_o $max_o \
         --query_size $query_size \
         --debug \
-        --novel_cam_trajectory novel_cam_trajectory
+        --novel_cam_trajectory $novel_cam_trajectory

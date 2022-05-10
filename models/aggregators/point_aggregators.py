@@ -103,12 +103,17 @@ class PointAggregator(torch.nn.Module):
         parser.add_argument(
             '--shading_feature_mlp_layer3',
             type=int,
-            default=2,
+            default=0,
             help='interp to agged features mlp num')
         parser.add_argument(
             '--shading_feature_mlp_layer4',
             type=int,
             default=1,
+            help='interp to agged features mlp num')
+        parser.add_argument(
+            '--shading_feature_mlp_linear',
+            type=int,
+            default=0,
             help='interp to agged features mlp num')
         parser.add_argument(
             '--shading_feature_num',
@@ -326,7 +331,7 @@ class PointAggregator(torch.nn.Module):
             self.block3 = self.passfunc
         #layer4:rotatation careless
         if opt.shading_feature_mlp_layer4 > 0:
-            in_channels = in_channels + 4*opt.num_feat_freqs+ (3 if "1" in list(opt.point_color_mode) else 0)
+            in_channels = in_channels + 6*opt.num_feat_freqs+ (3 if "1" in list(opt.point_color_mode) else 0)
             out_channels = opt.shading_feature_num
             block4 = []
             for i in range(opt.shading_feature_mlp_layer4):
@@ -338,6 +343,18 @@ class PointAggregator(torch.nn.Module):
         else:
             self.block4 = self.passfunc
 
+        if opt.shading_feature_mlp_linear > 0:
+            in_channels = in_channels
+            out_channels = opt.shading_feature_num
+            block_linear = []
+            for i in range(opt.shading_feature_mlp_layer4):
+                block_linear.append(nn.Linear(in_channels, out_channels))
+                block_linear.append(self.act(inplace=True))
+                in_channels = out_channels
+            self.block_linear = nn.Sequential(*block_linear)
+            block_init_lst.append(self.block_linear)
+        else:
+            self.block_linear = self.passfunc
         alpha_block = []
         in_channels = opt.shading_feature_num + (0 if opt.agg_alpha_xyz_mode == "None" else self.pnt_channels)
         out_channels = int(opt.shading_feature_num / 2)
@@ -521,7 +538,7 @@ class PointAggregator(torch.nn.Module):
                 if self.opt.apply_pnt_mask > 0:
                     pts_pnt=pts_pnt[pnt_mask_flat, :]
         viewdirs = viewdirs @ sampled_Rw2c if uni_w2c else (viewdirs[..., None, :] @ sampled_Rw2c_ray).squeeze(-2)#换左右手系[18816,3]
-        if self.num_viewdir_freqs > 0:#True，进行PE操作，viewdir做4级的傅里叶
+        if self.num_viewdir_freqs > 0:#True，进行PE操作，viewdir做4级的傅里叶-
             viewdirs = positional_encoding(viewdirs, self.num_viewdir_freqs, ori=True)#[18816,27]
             ori_viewdirs, viewdirs = viewdirs[..., :3], viewdirs[..., 3:]
             #[18816，3]
@@ -570,6 +587,9 @@ class PointAggregator(torch.nn.Module):
                 feat = torch.cat([feat, dists_flat], dim=-1)
             feat = self.block2(feat)
 
+        if self.opt.shading_feature_mlp_linear>0:
+            feat = self.block_linear(feat)
+        feat_branch = feat
         if self.opt.shading_feature_mlp_layer3>0:#True,2
             if sampled_color is not None:
                 sampled_color = sampled_color.view(-1, sampled_color.shape[-1])#[150528,3]
@@ -603,16 +623,26 @@ class PointAggregator(torch.nn.Module):
                 ori_viewdirs = ori_viewdirs[..., None, :].repeat(1, K, 1).view(-1, ori_viewdirs.shape[-1])
                 if self.opt.apply_pnt_mask > 0:
                     ori_viewdirs = ori_viewdirs[pnt_mask_flat, :]
-                proxy_sampled_dir = sampled_dir[:,:2]
-                proxy_ori_viewdirs = ori_viewdirs[:, :2]
-                proyz_sampled_dir = sampled_dir[:,1:]
-                proyz_ori_viewdirs = ori_viewdirs[:,1:]
-                theta = torch.sum(proxy_sampled_dir*proxy_ori_viewdirs,dim = -1)/torch.sqrt(torch.sum(proxy_sampled_dir*proxy_sampled_dir,dim=-1))/torch.sqrt(torch.sum(proxy_ori_viewdirs*proxy_ori_viewdirs,dim=-1))
-                fai   = torch.sum(proyz_sampled_dir*proyz_ori_viewdirs,dim = -1)/torch.sqrt(torch.sum(proyz_sampled_dir*proyz_sampled_dir,dim=-1))/torch.sqrt(torch.sum(proyz_ori_viewdirs*proyz_ori_viewdirs,dim=-1))
-                theta_fai_feat = torch.cat([theta[...,None],fai[...,None]], dim=-1)
-                theta_fai_feat = positional_encoding(theta_fai_feat,self.opt.num_feat_freqs)
-                feat = torch.cat([feat, theta_fai_feat],dim= -1)
-            feat = self.block4(feat)  # [35634,256+12]
+
+                proxy_sampled_dir = sampled_dir[:,:2]#[ptr,2]
+                proxy_ori_viewdirs = ori_viewdirs[:, :2]#[ptr,2]
+                proxz_sampled_dir = sampled_dir[:, ::2]  # [ptr,2]
+                proxz_ori_viewdirs = ori_viewdirs[:, ::2]  # [ptr,2]proxy_sampled_dir = sampled_dir[:,:2]#[ptr,2]
+                proyz_sampled_dir = sampled_dir[:, 1:]  # [ptr,2]
+                proyz_ori_viewdirs = ori_viewdirs[:, 1:]  # [ptr,2]proxy_sampled_dir = sampled_dir[:,:2]#[ptr,2]
+                theta = torch.sum(proxy_sampled_dir*proxy_ori_viewdirs,dim = -1)/torch.norm(proxy_sampled_dir,dim=-1)/torch.norm(proxy_ori_viewdirs,dim=-1)#[37410]
+                clockwise_theta_msk = torch.where(proxy_sampled_dir[:,0]*proxy_ori_viewdirs[:,1]-proxy_sampled_dir[:,1]*proxy_ori_viewdirs[:,1]>0,1,-1)
+                theta = clockwise_theta_msk*theta#[ptr]
+                row = torch.sum(proxz_sampled_dir * proxz_ori_viewdirs, dim=-1) / torch.norm(proxz_sampled_dir,dim=-1) / torch.norm(proxz_ori_viewdirs, dim=-1)  # [37410]
+                clockwise_row_msk = torch.where(proxz_sampled_dir[:, 0] * proxz_ori_viewdirs[:, 1] - proxz_sampled_dir[:, 1] * proxz_ori_viewdirs[:,1] > 0, 1, -1)
+                row = clockwise_row_msk * row  # [ptr]
+                fai = torch.sum(proyz_sampled_dir * proyz_ori_viewdirs, dim=-1) / torch.norm(proyz_sampled_dir,dim=-1) / torch.norm(proyz_ori_viewdirs, dim=-1) # [37410]
+                clockwise_fai_msk = torch.where(proyz_sampled_dir[:, 0] * proyz_ori_viewdirs[:, 1] - proyz_sampled_dir[:, 1] * proyz_ori_viewdirs[:,1] > 0, 1, -1)
+                fai = clockwise_fai_msk * fai  # [ptr]
+                row_theta_fai_feat = torch.cat([row[...,None],theta[...,None],fai[...,None]], dim=-1)#18
+                row_theta_fai_feat = positional_encoding(row_theta_fai_feat,self.opt.num_feat_freqs)#18
+                feat = torch.cat([feat, row_theta_fai_feat],dim= -1)
+            feat = self.block4(feat)  # [35634,256+18]
 
 
         if self.opt.agg_intrp_order == 1:#False
@@ -626,7 +656,7 @@ class PointAggregator(torch.nn.Module):
             feat = torch.sum(feat * weight, dim=-2).view([-1, feat.shape[-1]])[ray_valid, :]
 
 
-            alpha_in = feat
+            alpha_in = feat_branch
             if self.opt.agg_alpha_xyz_mode != "None":
                 alpha_in = torch.cat([alpha_in, pts], dim=-1)
 
@@ -644,7 +674,7 @@ class PointAggregator(torch.nn.Module):
             output = torch.cat([alpha, color_output], dim=-1)
 
         elif self.opt.agg_intrp_order == 2:#True
-            alpha_in = feat#[35634,256]
+            alpha_in = feat_branch#[35634,256]
             if self.opt.agg_alpha_xyz_mode != "None":
                 alpha_in = torch.cat([alpha_in, pts], dim=-1)
             alpha = self.raw2out_density(self.alpha_branch(alpha_in))
