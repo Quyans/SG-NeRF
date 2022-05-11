@@ -2,7 +2,7 @@
 novel_cam_trajectory="1"
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='17-scene0113-rotationinvariance_denseview_edit'
+name='19-scene0113-clockwiseangle_denseview_edit'
 
 resume_iter=latest # 20000 #latest
 data_root="${nrDataRoot}/scannet/scans/"
@@ -49,6 +49,7 @@ shading_feature_mlp_layer1=2 #2
 shading_feature_mlp_layer2=0 #1
 shading_feature_mlp_layer3=0 #1
 shading_feature_mlp_layer4=1 #1
+shading_feature_mlp_linear=1
 shading_alpha_mlp_layer=1
 shading_color_mlp_layer=4
 shading_feature_num=256
@@ -150,6 +151,7 @@ python3 test_ft.py \
         --shading_feature_mlp_layer2 $shading_feature_mlp_layer2 \
         --shading_feature_mlp_layer3 $shading_feature_mlp_layer3 \
         --shading_feature_mlp_layer4 $shading_feature_mlp_layer4 \
+        --shading_feature_mlp_linear $shading_feature_mlp_linear \
         --shading_feature_num $shading_feature_num \
         --dist_xyz_freq $dist_xyz_freq \
         --shpnt_jitter $shpnt_jitter \

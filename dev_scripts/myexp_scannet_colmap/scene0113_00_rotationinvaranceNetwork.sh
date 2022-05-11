@@ -2,7 +2,7 @@
 
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='18-scene0113-clockwiseangle_denseview'
+name='20-scene0113-clockwiseangle_sparseview'
 
 resume_iter=best #latest
 
@@ -55,9 +55,9 @@ wcoord_query=1
 z_depth_dim=400
 max_o=610000
 ranges=" -10.0 -10.0 -10.0 10.0 10.0 10.0 "
-SR=20 # 24
+SR=24 # 24
 K=8
-P=28 # 32
+P=32 # 32
 NN=2
 
 act_type="LeakyReLU"
@@ -102,7 +102,7 @@ num_pos_freqs=10
 num_viewdir_freqs=4 #6
 
 random_sample='random'
-random_sample_size=26 # 32 * 32 = 1024
+random_sample_size=32 # 32 * 32 = 1024
 batch_size=1
 
 plr=0.002
@@ -125,7 +125,7 @@ n_threads=2
 
 train_and_test=0 #1
 test_num=25
-test_freq=50000 #  #100 #1200 #1200 #30184 #30184 #50000
+test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=100
 test_num_step=50
 
