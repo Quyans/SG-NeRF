@@ -29,7 +29,7 @@ class CheckpointsController:
         self.latest_file_path = os.path.join(self.checkpoints_root,self.latest_iters+'_net_ray_marching.pth')# find the latest pth file
     # find the latest pth file in root of dataset and read that file
     def load_checkpoints_as_nerualpcd(self):
-        network_paras = torch.load(self.latest_file_path, map_location=self.device)
+        network_paras = torch.load(self.latest_file_path, map_location=torch.device('cpu'))
         print('loading checkpoints...',self.latest_file_path)
         self.points_xyz = network_paras["neural_points.xyz"].view(-1,3).cpu().numpy()
         self.points_embeding = network_paras["neural_points.points_embeding"].view(-1,32).cpu().numpy()

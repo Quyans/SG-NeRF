@@ -2,7 +2,7 @@
 
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='20-scene0113-clockwiseangle_sparseview'
+name='26-scene0113-clockwiseangle_denseview_colorgrad'
 
 resume_iter=best #latest
 
@@ -12,8 +12,8 @@ scan="scene0113_00"
 load_points=1
 feat_grad=1
 conf_grad=1
-dir_grad=0
-color_grad=0
+dir_grad=09
+color_grad=1
 vox_res=900
 normview=0
 prune_thresh=0.1
@@ -72,7 +72,7 @@ apply_pnt_mask=1
 shading_feature_mlp_layer0=1
 shading_feature_mlp_layer1=2
 shading_feature_mlp_layer2=0
-shading_feature_mlp_linear=1
+shading_feature_mlp_linear=0
 shading_feature_mlp_layer3=0 #1
 shading_feature_mlp_layer4=1 #0
 shading_alpha_mlp_layer=1
