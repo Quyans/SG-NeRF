@@ -32,7 +32,7 @@ def merge_dataset(path1,path2):#path1:basepath,make path2 move to path1
             shutil.copy(ori_depth_path, new_depth_path)
             shutil.copy(ori_pose_path, new_pose_path)
 
-def cauc_RotationMatrix(alpha,beta,gamma):
+def cauc_RotationMatrix(alpha,beta,gamma,rotmatrix = np.eye(3)):
     '''
     clockwise;
     外旋
@@ -59,7 +59,7 @@ def cauc_RotationMatrix(alpha,beta,gamma):
         [sin(gamma), cos(gamma), 0],
         [         0,          0, 1]
     ])
-    R = Rz@Ry@Rx
+    R = Rz@Ry@Rx@rotmatrix
     return R
 
 def cauc_transformationMatrix(rotationMatrix,posVector):
@@ -155,13 +155,26 @@ def load_camera_pose(filedir,filename = '0.txt'):
 def save_camera_pose(filedir,filename = '0.txt',matrix = np.eye(4)):
     np.savetxt(fname = os.path.join(filedir,filename),X = matrix)
     print('Save done camera pose !',filename)
-
-def interpolation_transformationMatrix(transM1,transM2,step,filedir):
-    transVec1 = transM1[:3,3]
-    transVec2 = transM2[:3,3]
+def rotate_camera_pos(transMat,angle,step,filedir):
+    rotMat = transMat[:3,:3]
+    transVec = transMat[:3,3]
+    x_range = np.linspace(start = 0,stop = angle[0],num = step)
+    y_range = np.linspace(start=0, stop=angle[1], num=step)
+    z_range = np.linspace(start=0, stop=angle[2], num=step)
+    for i in range(len(x_range)):
+        rotMat_new = cauc_RotationMatrix(x_range[i],y_range[i],z_range[i],rotMat)
+        transMat = cauc_transformationMatrix(rotMat_new,transVec)
+        save_camera_pose(filedir, "{}.txt".format(i), transMat)
+def interpolate_camera_pose(transM1,transM2,step,filedir):
     '''
     Now, assume rotation Matrix is equal.
+    use like :
+    mat1 = load_camera_pose('/home/slam/devdata/NSEPN/data_src/scannet/scans/scene0113_99/exported/pose','start.txt')
+    mat2 = load_camera_pose('/home/slam/devdata/NSEPN/data_src/scannet/scans/scene0113_99/exported/pose', 'end.txt')
+    interpolate_camera_pose(mat1,mat2,10,'/home/slam/devdata/NSEPN/data_src/scannet/scans/scene0113_99/exported/pose')
     '''
+    transVec1 = transM1[:3,3]
+    transVec2 = transM2[:3,3]
     rotMat = transM1[:3,:3]
     x_range = np.linspace(start = transVec1[0],stop = transVec2[0],num = step)
     y_range = np.linspace(start=transVec1[1], stop=transVec2[1], num=step)
@@ -170,9 +183,8 @@ def interpolation_transformationMatrix(transM1,transM2,step,filedir):
         transMat = cauc_transformationMatrix(rotMat,np.array([x_range[i],y_range[i],z_range[i]]))
         save_camera_pose(filedir,"{}.txt".format(i),transMat)
 if __name__=='__main__':
-    mat1 = load_camera_pose('/home/slam/devdata/NSEPN/data_src/scannet/scans/scene0113_99/exported/pose','start.txt')
-    mat2 = load_camera_pose('/home/slam/devdata/NSEPN/data_src/scannet/scans/scene0113_99/exported/pose', 'end.txt')
-    interpolation_transformationMatrix(mat1,mat2,10,'/home/slam/devdata/NSEPN/data_src/scannet/scans/scene0113_99/exported/pose')
+    mat = load_camera_pose('/home/slam/devdata/NSEPN/data_src/scannet/scans/scene0113_99/exported/pose', 'end.txt')
+    rotate_camera_pos(mat,[0,0,36],10,'/home/slam/devdata/NSEPN/data_src/scannet/scans/scene0113_99/exported/pose')
     # R = cauc_RotationMatrix(75,45,0)
     # T = cauc_transformationMatrix(R,np.array([1,2,3]))
     # T_inverse = inverse_transformationMatirx(T)
