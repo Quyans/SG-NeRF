@@ -320,7 +320,8 @@ class ScannetFtDataset(BaseDataset):
             print("Novel camera trajectory rendering")
             # self.test_id_list = self.all_id_list[::10]
             # self.train_id_list = []
-            self.test_id_list = self.all_id_list[300:600][::10]
+            # self.test_id_list = self.all_id_list[300:600][::10]
+            self.test_id_list = self.all_id_list[::1]
             self.train_id_list = []
         print("all_id_list",len(self.all_id_list))
         print("test_id_list",len(self.test_id_list), self.test_id_list)

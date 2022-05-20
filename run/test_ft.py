@@ -202,7 +202,7 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, l
             ray_masks = torch.cat(ray_masks, dim=1)
         gt_image = torch.zeros((height*width, 3), dtype=torch.float32)
         gt_image[edge_mask, :] = tmpgts['gt_image'].clone()
-        if 'gt_image' in model.visual_names:
+        if 'gt_image' in model.visual_names and opt.novel_cam_trajectory!="1":
             visuals['gt_image'] = gt_image
         if 'gt_mask' in curr_visuals:
             visuals['gt_mask'] = np.zeros((height, width, 3)).astype(chunk.dtype)

@@ -63,7 +63,8 @@ def cauc_RotationMatrix(alpha,beta,gamma):
     return R
 
 def cauc_transformationMatrix(rotationMatrix,posVector):
-    posVector = np.array(posVector)
+
+    # posVector = np.array(posVector)
     res = np.concatenate([rotationMatrix,posVector[...,None]],axis = -1)
     tmp = np.array([0,0,0,1])
     res = np.concatenate([res,tmp[None,...]],axis = 0)
@@ -119,8 +120,63 @@ def visualize_dir_vector():
 
     ax.axis(xmin=-1,xmax=1,ymin=-1,ymax=1)
     plt.show()
-if __name__=='__main__':
 
-    visualize_dir_vector()
-    # R = cauc_transformationMatrix(75,45,0)
-    # print(R)
+def inverse_transformationMatirx(transformationMatrix):
+    '''
+    p_new = R*p_old + t
+    R.inverse*(p_new-t) = p _old
+    p_old = R.inverse*p_new - R.inverse*t
+    '''
+    rotMat = transformationMatrix[:3,:3]
+    transVec = transformationMatrix[:3,3]
+    new_rotMat = np.array(np.matrix(rotMat).T)
+    new_transVec = -new_rotMat@ transVec
+    res = np.concatenate([new_rotMat, new_transVec[..., None]], axis=-1)
+    tmp = np.array([0, 0, 0, 1])
+    res = np.concatenate([res, tmp[None, ...]], axis=0)
+    return res
+def load_transformationMatrix_from_meshlabproject(path):
+    import xml.etree.ElementTree
+    from xml.dom import minidom
+    from xml.etree.ElementTree import parse
+    doc = minidom.parse(path)
+    VCGCamera = doc.getElementsByTagName("VCGCamera")
+    tran_Vector = VCGCamera[0].getAttribute('TranslationVector').split(' ')
+    tran_Vector = np.array([float(i) for i in tran_Vector][:3])
+    rot_Mat = VCGCamera[0].getAttribute('RotationMatrix').split(' ')
+    rot_Mat = np.array([float(i) for i in rot_Mat[:-1]]).reshape((4,4))[:3,:3]
+    transformationMatrix = cauc_transformationMatrix(rot_Mat,tran_Vector)
+    return transformationMatrix
+
+def load_camera_pose(filedir,filename = '0.txt'):
+    cam_pos_path = os.path.join(filedir,filename)
+    mat = np.loadtxt(cam_pos_path)
+    return mat
+def save_camera_pose(filedir,filename = '0.txt',matrix = np.eye(4)):
+    np.savetxt(fname = os.path.join(filedir,filename),X = matrix)
+    print('Save done camera pose !',filename)
+
+def interpolation_transformationMatrix(transM1,transM2,step,filedir):
+    transVec1 = transM1[:3,3]
+    transVec2 = transM2[:3,3]
+    '''
+    Now, assume rotation Matrix is equal.
+    '''
+    rotMat = transM1[:3,:3]
+    x_range = np.linspace(start = transVec1[0],stop = transVec2[0],num = step)
+    y_range = np.linspace(start=transVec1[1], stop=transVec2[1], num=step)
+    z_range = np.linspace(start=transVec1[2], stop=transVec2[2], num=step)
+    for i in range (len(x_range)):
+        transMat = cauc_transformationMatrix(rotMat,np.array([x_range[i],y_range[i],z_range[i]]))
+        save_camera_pose(filedir,"{}.txt".format(i),transMat)
+if __name__=='__main__':
+    mat1 = load_camera_pose('/home/slam/devdata/NSEPN/data_src/scannet/scans/scene0113_99/exported/pose','start.txt')
+    mat2 = load_camera_pose('/home/slam/devdata/NSEPN/data_src/scannet/scans/scene0113_99/exported/pose', 'end.txt')
+    interpolation_transformationMatrix(mat1,mat2,10,'/home/slam/devdata/NSEPN/data_src/scannet/scans/scene0113_99/exported/pose')
+    # R = cauc_RotationMatrix(75,45,0)
+    # T = cauc_transformationMatrix(R,np.array([1,2,3]))
+    # T_inverse = inverse_transformationMatirx(T)
+    # print(T_inverse)
+    # transformationMatrix = load_transformationMatrix_from_meshlabproject('/home/slam/devdata/NSEPN/campose_test.xml')
+    # transformationMatrix_inverse = inverse_transformationMatirx(transformationMatrix)
+    # save_camera_pose(filedir = '/home/slam/devdata/NSEPN/data_src/scannet/scans/scene0113_99/exported/pose',filename = '0.txt',matrix = transformationMatrix_inverse)

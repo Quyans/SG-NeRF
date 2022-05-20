@@ -6,7 +6,7 @@ name='27-scene0113-clockwiseangle_denseview_colorgrad_edit'
 
 resume_iter=latest # 20000 #latest
 data_root="${nrDataRoot}/scannet/scans/"
-scan="scene0113_00"
+scan="scene0113_99"
 normview=0
 edge_filter=10 # pixels crop out at image edge
 
