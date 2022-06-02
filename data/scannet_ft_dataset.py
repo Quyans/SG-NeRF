@@ -312,7 +312,7 @@ class ScannetFtDataset(BaseDataset):
                 self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
                 self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
             else:  # nsvf configuration
-                step=1#5
+                step=5#5
                 self.train_id_list = self.all_id_list[::step]
                 self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
         else:
@@ -393,18 +393,24 @@ class ScannetFtDataset(BaseDataset):
     #！！没看
     def parse_mesh(self):
         points_path = os.path.join(self.data_dir, self.scan, "exported/pcd.ply")
-        mesh_path = os.path.join(self.data_dir, self.scan, self.scan + "_vh_clean.ply")
+        mesh_path = os.path.join(self.data_dir, self.scan, self.scan + "_vh_clean_2.ply")
         plydata = PlyData.read(mesh_path)
         print("plydata 0", plydata.elements[0], plydata.elements[0].data["blue"].dtype)
+        # parse semantic mesh
+        points_semantic_path = os.path.join(self.data_dir, self.scan, "exported/pcd_semantic.ply")
+        mesh_semantic_path = os.path.join(self.data_dir, self.scan, self.scan + "_vh_clean_2.labels.ply")
+        ply_sem_data = PlyData.read(mesh_semantic_path)
 
-        vertices = np.empty(len( plydata.elements[0].data["blue"]), dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')])
+        print("ply_sem_data 0", ply_sem_data.elements[0], ply_sem_data.elements[0].data["label"].dtype)
+
+        vertices = np.empty(len( plydata.elements[0].data["blue"]), dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1'),('label', 'u1')])
         vertices['x'] = plydata.elements[0].data["x"].astype('f4')
         vertices['y'] = plydata.elements[0].data["y"].astype('f4')
         vertices['z'] = plydata.elements[0].data["z"].astype('f4')
         vertices['red'] = plydata.elements[0].data["red"].astype('u1')
         vertices['green'] = plydata.elements[0].data["green"].astype('u1')
         vertices['blue'] = plydata.elements[0].data["blue"].astype('u1')
-
+        vertices['label']=ply_sem_data.elements[0].data["label"].astype('u1')
         # save as ply
         ply = PlyData([PlyElement.describe(vertices, 'vertex')], text=False)
         ply.write(points_path)
@@ -417,16 +423,19 @@ class ScannetFtDataset(BaseDataset):
             if not os.path.exists(points_path):
                 self.parse_mesh()
         plydata = PlyData.read(points_path)
+        # points_semantic_path = os.path.join(self.data_dir,self.scan,"exported/")
         # plydata (PlyProperty('x', 'double'), PlyProperty('y', 'double'), PlyProperty('z', 'double'), PlyProperty('nx', 'double'), PlyProperty('ny', 'double'), PlyProperty('nz', 'double'), PlyProperty('red', 'uchar'), PlyProperty('green', 'uchar'), PlyProperty('blue', 'uchar'))
         x,y,z=torch.as_tensor(plydata.elements[0].data["x"].astype(np.float32), device="cuda", dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["y"].astype(np.float32), device="cuda", dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["z"].astype(np.float32), device="cuda", dtype=torch.float32)
         points_xyz = torch.stack([x,y,z], dim=-1)
+        points_label = torch.as_tensor(plydata.elements[0].data["label"].astype(np.uint8)[...,None], device="cuda", dtype=torch.uint8)
         if self.opt.ranges[0] > -99.0:
             ranges = torch.as_tensor(self.opt.ranges, device=points_xyz.device, dtype=torch.float32)
             mask = torch.prod(torch.logical_and(points_xyz >= ranges[None, :3], points_xyz <= ranges[None, 3:]), dim=-1) > 0
             points_xyz = points_xyz[mask]
+            points_label = points_label[mask]
         # np.savetxt(os.path.join(self.data_dir, self.scan, "exported/pcd.txt"), points_xyz.cpu().numpy(), delimiter=";")
 
-        return points_xyz
+        return points_xyz , points_label
 
     def read_depth(self, filepath):
         depth_im = cv2.imread(filepath, -1).astype(np.float32)
@@ -580,6 +589,13 @@ class ScannetFtDataset(BaseDataset):
         camrot = (c2w[0:3, 0:3])
         campos = c2w[0:3, 3]
         # print("camrot", camrot, campos)
+        '''
+        semantic itm
+        '''
+        semantic_path = os.path.join(self.data_dir, self.scan, "label-filt/{}.png".format(vid))
+        gt_semantic_img = Image.open(semantic_path)
+        gt_semantic_img = gt_semantic_img.resize(self.img_wh, Image.LANCZOS)
+        gt_semantic_img = self.transform(gt_semantic_img)  # (batch, h, w)
 
         item["intrinsic"] = intrinsic
         # item["intrinsic"] = sample['intrinsics'][0, ...]
@@ -602,6 +618,7 @@ class ScannetFtDataset(BaseDataset):
         if full_img:
             item['images'] = img[None,...].clone()
         gt_image = np.transpose(img, (1, 2, 0))
+        gt_semantic_img = np.transpose(gt_semantic_img,(1,2,0))
         subsamplesize = self.opt.random_sample_size
         if self.opt.random_sample == "patch":#随机取一个patch，patch长宽为28*28
             indx = np.random.randint(margin, width - margin - subsamplesize + 1)#左边沿margin，右边沿
@@ -636,13 +653,18 @@ class ScannetFtDataset(BaseDataset):
         pixelcoords = np.stack((px, py), axis=-1).astype(np.float32)  # H x W x 2
         # raydir = get_cv_raydir(pixelcoords, self.height, self.width, focal, camrot)
         item["pixel_idx"] = pixelcoords
+        gt_image = gt_image[py.astype(np.int32), px.astype(np.int32)]
+        gt_semantic_image = gt_semantic_img[py.astype(np.int32), px.astype(np.int32)]
+        item["pixel_label"] = gt_semantic_image
         # print("pixelcoords", pixelcoords.reshape(-1,2)[:10,:])
         raydir = get_dtu_raydir(pixelcoords, item["intrinsic"], camrot, self.opt.dir_norm > 0)
         raydir = np.reshape(raydir, (-1, 3))#应当是一个[28*28,3]
         item['raydir'] = torch.from_numpy(raydir).float()
-        gt_image = gt_image[py.astype(np.int32), px.astype(np.int32)]
+
         # gt_mask = gt_mask[py.astype(np.int32), px.astype(np.int32), :]
         gt_image = np.reshape(gt_image, (-1, 3))
+        gt_semantic_image = np.reshape(gt_semantic_image, (-1, 1))
+        item['gt_semantic_image'] = gt_semantic_image
         item['gt_image'] = gt_image
 
         if self.bg_color:

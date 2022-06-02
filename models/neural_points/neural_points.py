@@ -12,9 +12,14 @@ class NeuralPoints(nn.Module):
 
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
-        parser.add_argument('--load_points',
+        parser.add_argument('--semantic_guidance',
                             type=int,
                             default=0,
+                            help='If 0:use default K-means sampler;If 1:use semantic guidance sampler')
+
+        parser.add_argument('--load_points',
+                            type=int,
+                            default=1,
                             help='normalize the ray_dir to unit length or not, default not')
 
         parser.add_argument('--point_noise',
@@ -236,15 +241,16 @@ class NeuralPoints(nn.Module):
 
         self.opt = opt
         self.grid_vox_sz = 0
-        self.points_conf, self.points_dir, self.points_color, self.eulers, self.Rw2c = None, None, None, None, None
+        self.points_conf, self.points_dir, self.points_color, self.eulers, self.Rw2c,self.points_label = None, None, None, None, None,None
         self.device=device
-        if self.opt.load_points ==1:
+        if self.opt.load_points ==1:#初始化时候没有，如果在pth里就有
             saved_features = None
             if checkpoint:
                 saved_features = torch.load(checkpoint, map_location=device)
 
             if saved_features is not None and "neural_points.xyz" in saved_features:#true
                 self.xyz = nn.Parameter(saved_features["neural_points.xyz"])
+
             else:
 
                 point_xyz, _ = load_blender_cloud(self.opt.cloud_path, self.opt.num_point)
@@ -275,6 +281,7 @@ class NeuralPoints(nn.Module):
             # np.savetxt(filepath, self.xyz.reshape(-1, 3).detach().cpu().numpy(), delimiter=";")
 
             if checkpoint:#谁要学，nn.par谁，反正都存pth里面，这个实现方式还是不错的
+                self.points_label = nn.Parameter(saved_features["neural_points.points_label"], requires_grad=False)
                 self.points_embeding = nn.Parameter(saved_features["neural_points.points_embeding"]) if "neural_points.points_embeding" in saved_features else None
                 print("self.points_embeding", self.points_embeding.shape)
                 # points_conf = saved_features["neural_points.points_conf"] if "neural_points.points_conf" in saved_features else None
@@ -324,7 +331,7 @@ class NeuralPoints(nn.Module):
             if self.eulers is not None:
                 self.eulers.requires_grad = False
             if self.Rw2c is not None:
-                self.Rw2c.requires_grad = False
+                self.Rw2c.requires_grad = False#NNO
 
         self.reg_weight = reg_weight
         self.opt.query_size = self.opt.kernel_size if self.opt.query_size[0] == 0 else self.opt.query_size
@@ -402,16 +409,16 @@ class NeuralPoints(nn.Module):
             self.Rw2c = nn.Parameter(torch.cat([self.Rw2c, add_Rw2c[None,...]], dim=1))
             self.Rw2c.requires_grad = False
 
-    def set_points(self, points_xyz, points_embeding, points_color=None, points_dir=None, points_conf=None, parameter=False, Rw2c=None, eulers=None):
-        if points_embeding.shape[-1] > self.opt.point_features_dim:
+    def set_points(self, points_xyz, points_label,points_embeding, points_color=None, points_dir=None, points_conf=None,points_semantic=None, parameter=False, Rw2c=None, eulers=None):
+        if points_embeding.shape[-1] > self.opt.point_features_dim:#No
             points_embeding = points_embeding[..., :self.opt.point_features_dim]
-        if self.opt.default_conf > 0.0 and self.opt.default_conf <= 1.0 and points_conf is not None:
+        if self.opt.default_conf > 0.0 and self.opt.default_conf <= 1.0 and points_conf is not None:#No
             points_conf = torch.ones_like(points_conf) * self.opt.default_conf
         #默认参数全是1全会回归啊啊啊
         if parameter:
             self.xyz = nn.Parameter(points_xyz)#不会对点云做grad
             self.xyz.requires_grad = self.opt.xyz_grad > 0
-
+            self.points_label = nn.Parameter(points_label,requires_grad=False)
             if points_conf is not None:
                 points_conf = nn.Parameter(points_conf)
                 points_conf.requires_grad = self.opt.conf_grad > 0#yes
@@ -556,8 +563,9 @@ class NeuralPoints(nn.Module):
         plt.imshow(gtbackground)
         plt.show()
 
+    # 需要更改，采样的时候采集语义点云
 
-    def get_point_indices(self, inputs, cam_rot_tensor, cam_pos_tensor, pixel_idx_tensor, near_plane, far_plane, h, w, intrinsic, vox_query=False):
+    def get_point_indices(self, inputs, cam_rot_tensor, cam_pos_tensor, pixel_idx_tensor, pixel_label_tensor, near_plane, far_plane, h, w, intrinsic, vox_query=False):
         '''
         cam_rot_tensor:[1,3,3]
         cam_pos_tensor [1,3]
@@ -584,7 +592,7 @@ class NeuralPoints(nn.Module):
         #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
         #vsize_np[0.008 0.008 0.008]
         #ranges_np[-1.6265 -1.9573 -3.2914 3.868 4.070 2.417]
-        sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = self.querier.query_points(pixel_idx_tensor, point_xyz_pers_tensor, self.xyz[None,...], actual_numpoints_tensor, h, w, intrinsic, near_plane, far_plane, ray_dirs_tensor, cam_pos_tensor, cam_rot_tensor)
+        sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = self.querier.query_points(pixel_idx_tensor,pixel_label_tensor, point_xyz_pers_tensor, self.xyz[None,...],self.points_label[None,...], actual_numpoints_tensor, h, w, intrinsic, near_plane, far_plane, ray_dirs_tensor, cam_pos_tensor, cam_rot_tensor)
         # sample_pidx_tensor[1,784,24,8];sample_loc_tensor[1,784,24,3];sample_loc_w_tensor[1,784,24,3];sample_ray_dirs_tensor[1,784,24,3];ray_mask_tensor[1,784]
         #loc_w ? whats meaning
         B, _, SR, K = sample_pidx_tensor.shape#B1 SR24 K 8
@@ -730,7 +738,7 @@ class NeuralPoints(nn.Module):
 
     def forward(self, inputs):
 
-        pixel_idx, camrotc2w, campos, near_plane, far_plane, h, w, intrinsic = inputs["pixel_idx"].to(torch.int32), inputs["camrotc2w"], inputs["campos"], inputs["near"], inputs["far"], inputs["h"], inputs["w"], inputs["intrinsic"]
+        pixel_idx, camrotc2w, campos, near_plane, far_plane, h, w, intrinsic,pixel_label = inputs["pixel_idx"].to(torch.int32), inputs["camrotc2w"], inputs["campos"], inputs["near"], inputs["far"], inputs["h"], inputs["w"], inputs["intrinsic"],inputs["pixel_label"]
         # 1, 294, 24, 32;   1, 294, 24;     1, 291, 2
         # sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
         # sample_loc_tensor[1,784,24,3]存某个pixel需要query的点的坐标，换坐标系了，应该从世界坐标系转到了pers（相机坐标系？）
@@ -739,8 +747,8 @@ class NeuralPoints(nn.Module):
         #sample_loc_w_tensor[1,784,24,3]存某个pixel需要query的点的坐标(应该是世界坐标系的）
         # sample_ray_dirs_tensor[1,784,24,3]存dir,24个点的3d方向向量相同
         #vsize：voxel size [0.008 0.008 0.008]
-        sample_pidx, sample_loc, ray_mask_tensor, point_xyz_pers_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, vsize = self.get_point_indices(inputs, camrotc2w, campos, pixel_idx, torch.min(near_plane).cpu().numpy(), torch.max(far_plane).cpu().numpy(), torch.max(h).cpu().numpy(), torch.max(w).cpu().numpy(), intrinsic.cpu().numpy()[0], vox_query=self.opt.NN<0)
-
+        #pixel_label!新加入的[1,784,1]Label ray
+        sample_pidx, sample_loc, ray_mask_tensor, point_xyz_pers_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, vsize = self.get_point_indices(inputs, camrotc2w, campos, pixel_idx,pixel_label, torch.min(near_plane).cpu().numpy(), torch.max(far_plane).cpu().numpy(), torch.max(h).cpu().numpy(), torch.max(w).cpu().numpy(), intrinsic.cpu().numpy()[0], vox_query=self.opt.NN<0)
         sample_pnt_mask = sample_pidx >= 0#[1,784,24,8]，colmap点云的msk
         B, R, SR, K = sample_pidx.shape#B：batch，R：sampled_pixel;SR:24一个ray最多query的点 K: 8一个query点的max num neighbour
         sample_pidx = torch.clamp(sample_pidx, min=0).view(-1).long()#sample_pidx = 150528

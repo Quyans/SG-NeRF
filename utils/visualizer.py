@@ -109,6 +109,13 @@ class Visualizer:
                     points = points.detach().cpu().numpy()
                 pnt_lst.append(points)
             save_points(np.stack(pnt_lst,axis=0), self.point_dir, total_steps)
+        elif features.shape[-1] == 1:#semantic feat
+            points = torch.cat([xyz, features], dim=-1)
+            if torch.is_tensor(points):
+                # xyz = xyz.detach().cpu().numpy()
+                points = points.detach().cpu().numpy()
+            save_points(points, self.point_dir, total_steps)
+
         else:
             points = torch.cat([xyz, features[0, ..., :3] * 255], dim=-1)
             if torch.is_tensor(points):

@@ -651,7 +651,7 @@ def main():
             model.setup(opt)
             model.eval()
             if load_points in [1,3]:#True,load point = 1
-                points_xyz_all = train_dataset.load_init_points()
+                points_xyz_all,points_label_all = train_dataset.load_init_points()
             if load_points == 2:#False
                 points_xyz_all = train_dataset.load_init_depth_points(device="cuda", vox_res=100)
             if load_points == 3:#False
@@ -682,43 +682,48 @@ def main():
                     torch.logical_and(points_xyz_all[..., :3] >= ranges[None, :3], points_xyz_all[..., :3] <= ranges[None, 3:]),
                     dim=-1) > 0
                 points_xyz_all = points_xyz_all[mask]
-
+                points_label_all = points_label_all[mask]
 
             if opt.vox_res > 0:
                 points_xyz_all = [points_xyz_all] if not isinstance(points_xyz_all, list) else points_xyz_all
+                points_label_all = [points_label_all] if not isinstance(points_label_all, list) else points_label_all
                 points_xyz_holder = torch.zeros([0,3], dtype=points_xyz_all[0].dtype, device="cuda")
+                points_label_holder = torch.zeros([0,1], dtype=points_label_all[0].dtype, device="cuda")
                 for i in range(len(points_xyz_all)):#一次遍历的是一张图片里
                     points_xyz = points_xyz_all[i]
+                    points_label = points_label_all[i]
                     vox_res = opt.vox_res // (1.5**i)
                     print("load points_xyz", points_xyz.shape)
                     _, sparse_grid_idx, sampled_pnt_idx = mvs_utils.construct_vox_points_closest(points_xyz.cuda() if len(points_xyz) < 80000000 else points_xyz[::(len(points_xyz) // 80000000 + 1), ...].cuda(), vox_res)
                     points_xyz = points_xyz[sampled_pnt_idx, :]
+                    points_label = points_label[sampled_pnt_idx, :]
                     print("after voxelize:", points_xyz.shape)
                     points_xyz_holder = torch.cat([points_xyz_holder, points_xyz], dim=0)
+                    points_label_holder = torch.cat([points_label_holder,points_label], dim=0)
                 points_xyz_all = points_xyz_holder
+                points_label_all = points_label_holder
 
-
-
-            if opt.resample_pnts > 0:#False
-                if opt.resample_pnts == 1:
-                    print("points_xyz_all",points_xyz_all.shape)
-                    inds = torch.min(torch.norm(points_xyz_all, dim=-1, keepdim=True), dim=0)[1] # use the point closest to the origin
-                else:
-                    inds = torch.randperm(len(points_xyz_all))[:opt.resample_pnts, ...]
-                points_xyz_all = points_xyz_all[inds, ...]
+            # if opt.resample_pnts > 0:#False
+            #     if opt.resample_pnts == 1:
+            #         print("points_xyz_all",points_xyz_all.shape)
+            #         inds = torch.min(torch.norm(points_xyz_all, dim=-1, keepdim=True), dim=0)[1] # use the point closest to the origin
+            #     else:
+            #         inds = torch.randperm(len(points_xyz_all))[:opt.resample_pnts, ...]
+            #     points_xyz_all = points_xyz_all[inds, ...]
 
             campos, camdir = train_dataset.get_campos_ray()
             cam_ind = nearest_view(campos, camdir, points_xyz_all, train_dataset.id_list)#找到每个点其最近camera
             unique_cam_ind = torch.unique(cam_ind)
             print("unique_cam_ind", unique_cam_ind.shape)
             points_xyz_all = [points_xyz_all[cam_ind[:,0]==unique_cam_ind[i], :] for i in range(len(unique_cam_ind))]#按照camera list 分开points_xyz_all
-
+            points_label_all = [points_label_all[cam_ind[:,0]==unique_cam_ind[i], :] for i in range(len(unique_cam_ind))]
             featuredim = opt.point_features_dim
             points_embedding_all = torch.zeros([1, 0, featuredim], device=unique_cam_ind.device, dtype=torch.float32)
             points_color_all = torch.zeros([1, 0, 3], device=unique_cam_ind.device, dtype=torch.float32)
             points_dir_all = torch.zeros([1, 0, 3], device=unique_cam_ind.device, dtype=torch.float32)
             points_conf_all = torch.zeros([1, 0, 1], device=unique_cam_ind.device, dtype=torch.float32)
             print("extract points embeding & colors", )
+            # fuse semantic information
             for i in tqdm(range(len(unique_cam_ind))):#对于每个camera，生成全局中离自己最近的点的特征
                 id = unique_cam_ind[i]
                 batch = train_dataset.get_item(id, full_img=True)
@@ -727,6 +732,7 @@ def main():
                 w2c = torch.inverse(c2w)
                 intrinsic = batch["intrinsic"].cuda()
                 cam_xyz_all = (torch.cat([points_xyz_all[i], torch.ones_like(points_xyz_all[i][...,-1:])], dim=-1) @ w2c.transpose(0,1))[..., :3]
+                cam_label_all = points_label_all[i]
                 # embedding->图像卷积后的feature，点采样，过个mlp得到的
                 embedding, color, dir, conf = model.query_embedding(HDWD, cam_xyz_all[None,...], None, batch['images'].cuda(), c2w[None, None,...], w2c[None, None,...], intrinsic[:, None,...], 0, pointdir_w=True)
                 conf = conf * opt.default_conf if opt.default_conf > 0 and opt.default_conf < 1.0 else conf
@@ -736,7 +742,8 @@ def main():
                 points_conf_all = torch.cat([points_conf_all, conf], dim=1)
                 # visualizer.save_neural_points(id, cam_xyz_all, color, batch, save_ref=True)
             points_xyz_all=torch.cat(points_xyz_all, dim=0)
-            visualizer.save_neural_points("init", points_xyz_all, points_color_all, None, save_ref=load_points == 0)
+            points_label_all = torch.cat(points_label_all,dim=0)
+            visualizer.save_neural_points("init", points_xyz_all, points_label_all, None, save_ref=load_points == 0)
             # print("vis")
             # visualizer.save_neural_points("cam", campos, None, None, None)
             # print("vis")
@@ -757,7 +764,7 @@ def main():
                 points_color_all = torch.cat([points_color_all, gen_dir], dim=1)
                 points_dir_all = torch.cat([points_dir_all, gen_color], dim=1)
                 points_conf_all = torch.cat([points_conf_all, gen_conf], dim=1)
-            model.set_points(points_xyz_all.cuda(), points_embedding_all.cuda(), points_color=points_color_all.cuda(),
+            model.set_points(points_xyz = points_xyz_all.cuda(),points_label = points_label_all.cuda(), points_embedding = points_embedding_all.cuda(), points_color=points_color_all.cuda(),
                              points_dir=points_dir_all.cuda(), points_conf=points_conf_all.cuda(),
                              Rw2c=normRw2c.cuda() if opt.load_points < 1 and opt.normview != 3 else None)
             epoch_count = 1
