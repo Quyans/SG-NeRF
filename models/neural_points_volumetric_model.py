@@ -157,7 +157,7 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
         params = self.get_additional_network_params(opt)
         # network
         self.net_ray_marching = NeuralPointsRayMarching(
-            **params, **self.found_funcs)
+             **params, **self.found_funcs)
 
         self.model_names = ['ray_marching'] if getattr(self, "model_names", None) is None else self.model_names + ['ray_marching']
 

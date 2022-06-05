@@ -658,9 +658,11 @@ class ScannetFtDataset(BaseDataset):
         item["pixel_label"] = gt_semantic_image
         # print("pixelcoords", pixelcoords.reshape(-1,2)[:10,:])
         raydir = get_dtu_raydir(pixelcoords, item["intrinsic"], camrot, self.opt.dir_norm > 0)
+        raylabel = gt_semantic_image
         raydir = np.reshape(raydir, (-1, 3))#应当是一个[28*28,3]
+        raylabel = np.reshape(raylabel,(-1,1))
         item['raydir'] = torch.from_numpy(raydir).float()
-
+        item['raylabel'] = raylabel
         # gt_mask = gt_mask[py.astype(np.int32), px.astype(np.int32), :]
         gt_image = np.reshape(gt_image, (-1, 3))
         gt_semantic_image = np.reshape(gt_semantic_image, (-1, 1))
