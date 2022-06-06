@@ -135,7 +135,8 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, l
     print('-----------------------------------Testing-----------------------------------')
     model.eval()
     total_num = dataset.total
-    print("test set size {}, interval {}".format(total_num, opt.test_num_step)) # 1 if test_steps == 10000 else opt.test_num_step
+    print("test set size {}, interval {}".format(total_num,
+                                                 opt.test_num_step))  # 1 if test_steps == 10000 else opt.test_num_step
     patch_size = opt.random_sample_size
     chunk_size = patch_size * patch_size
 
@@ -143,19 +144,20 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, l
     width = dataset.width
     visualizer.reset()
     count = 0
-    for i in range(0, total_num, opt.test_num_step): # 1 if test_steps == 10000 else opt.test_num_step
+    for i in range(0, total_num, opt.test_num_step):  # 1 if test_steps == 10000 else opt.test_num_step
         data = dataset.get_item(i)
         raydir = data['raydir'].clone()
+        pixel_label = data['pixel_label'].view(data['pixel_label'].shape[0], -1, data['pixel_label'].shape[3]).clone()
         pixel_idx = data['pixel_idx'].view(data['pixel_idx'].shape[0], -1, data['pixel_idx'].shape[3]).clone()
         edge_mask = torch.zeros([height, width], dtype=torch.bool)
-        edge_mask[pixel_idx[0,...,1].to(torch.long), pixel_idx[0,...,0].to(torch.long)] = 1
-        edge_mask=edge_mask.reshape(-1) > 0
-        np_edge_mask=edge_mask.numpy().astype(bool)
+        edge_mask[pixel_idx[0, ..., 1].to(torch.long), pixel_idx[0, ..., 0].to(torch.long)] = 1
+        edge_mask = edge_mask.reshape(-1) > 0
+        np_edge_mask = edge_mask.numpy().astype(bool)
         totalpixel = pixel_idx.shape[1]
         tmpgts = {}
         tmpgts["gt_image"] = data['gt_image'].clone()
         tmpgts["gt_mask"] = data['gt_mask'].clone() if "gt_mask" in data else None
-        print("data['gt_image']")
+
         # data.pop('gt_image', None)
         data.pop('gt_mask', None)
 
@@ -167,19 +169,21 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, l
             end = min([k + chunk_size, totalpixel])
             data['raydir'] = raydir[:, start:end, :]
             data["pixel_idx"] = pixel_idx[:, start:end, :]
+            data["pixel_label"] = pixel_label[:, start:end, :]
             model.set_input(data)
-
             if opt.bgmodel.endswith("plane"):
                 img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, fg_masks, bg_ray_lst = bg_info
                 if len(bg_ray_lst) > 0:
                     bg_ray_all = bg_ray_lst[data["id"]]
-                    bg_idx = data["pixel_idx"].view(-1,2)
-                    bg_ray = bg_ray_all[:, bg_idx[:,1].long(), bg_idx[:,0].long(), :]
+                    bg_idx = data["pixel_idx"].view(-1, 2)
+                    bg_ray = bg_ray_all[:, bg_idx[:, 1].long(), bg_idx[:, 0].long(), :]
                 else:
                     xyz_world_sect_plane = mvs_utils.gen_bg_points(data)
-                    bg_ray, _ = model.set_bg(xyz_world_sect_plane, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, data["plane_color"], fg_masks=fg_masks, vis=visualizer)
+                    bg_ray, _ = model.set_bg(xyz_world_sect_plane, img_lst, c2ws_lst, w2cs_lst, intrinsics_all,
+                                             HDWD_lst, data["plane_color"], fg_masks=fg_masks, vis=visualizer)
                 data["bg_ray"] = bg_ray
 
+                # xyz_world_sect_plane_lst.append(xyz_world_sect_plane)
             model.test()
             curr_visuals = model.get_current_visuals(data=data)
             chunk_pixel_id = data["pixel_idx"].cpu().numpy().astype(np.int32)

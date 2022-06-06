@@ -24,7 +24,7 @@ class Options:
         parser = argparse.ArgumentParser(description="Argparse of  point_editor")
         parser.add_argument('--checkpoints_root',
                             type=str,
-                            default='/home/slam/devdata/NSEPN/checkpoints/scannet/27-scene0113-clockwiseangle_denseview_colorgrad_edit',#/home/slam/devdata/pointnerf/checkpoints/scannet/scene000-T
+                            default='/home/slam/devdata/NSEPN/checkpoints/scannet/30-scene0113-clockwiseangle_sparseview_colorgrad_sparsepcd',#/home/slam/devdata/pointnerf/checkpoints/scannet/scene000-T
                             help='root of checkpoints datasets')
         parser.add_argument('--gpu_ids',
                             type=str,
@@ -51,7 +51,8 @@ def test_edit(opt):
     object_npcd = object_mpcd.meshlabpcd2neuralpcd(scene_npcd)
     object_npcd.save_as_ply('sofa1')
     pce = PointCloudEditor(opt)
-    transMatrix = cauc_transformationMatrix(cauc_RotationMatrix(0, 0, 0), [0, -0.8, 0])
+    R = cauc_RotationMatrix(0, 0, 0)
+    transMatrix = cauc_transformationMatrix(R, np.array([0, -0.8, 0]))
     transed_sofa = pce.translation_point_cloud_local(object_npcd,transMatrix)
     transed_sofa.save_as_ply('sofa1_trans(0,0,0)(0,-0.8,0)')
     new_scene = pce.add_point_cloud(transed_sofa,scene_npcd)

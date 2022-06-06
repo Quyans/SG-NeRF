@@ -635,7 +635,8 @@ class lighting_fast_querier():
         if self.opt.semantic_guidance == 1:
             print("SAMPLER!!!!!query_neigh_along_ray_layered_semantic_guidance")
             query_along_ray = mod.get_function("query_neigh_along_ray_layered_semantic_guidance")
-
+        if self.opt.split=='test':
+            query_along_ray = mod.get_function("query_rand_along_ray")
         return claim_occ, map_coor2occ, fill_occ2pnts, mask_raypos, get_shadingloc, query_along_ray
 
 

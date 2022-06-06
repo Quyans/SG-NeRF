@@ -103,7 +103,7 @@ num_pos_freqs=10
 num_viewdir_freqs=4 #6
 
 random_sample='random'
-random_sample_size=128 # 32 * 32 = 1024
+random_sample_size=64 # 32 * 32 = 1024
 batch_size=1
 
 plr=0.002
