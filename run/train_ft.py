@@ -267,6 +267,7 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=False, 
     for i in range(0, total_num, opt.test_num_step): # 1 if test_steps == 10000 else opt.test_num_step
         data = dataset.get_item(i)
         raydir = data['raydir'].clone()
+        pixel_label = data['pixel_label'].view(data['pixel_label'].shape[0], -1, data['pixel_label'].shape[3]).clone()
         pixel_idx = data['pixel_idx'].view(data['pixel_idx'].shape[0], -1, data['pixel_idx'].shape[3]).clone()
         edge_mask = torch.zeros([height, width], dtype=torch.bool)
         edge_mask[pixel_idx[0,...,1].to(torch.long), pixel_idx[0,...,0].to(torch.long)] = 1
@@ -288,6 +289,7 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=False, 
             end = min([k + chunk_size, totalpixel])
             data['raydir'] = raydir[:, start:end, :]
             data["pixel_idx"] = pixel_idx[:, start:end, :]
+            data["pixel_label"] = pixel_label[:, start:end, :]
             model.set_input(data)
             if opt.bgmodel.endswith("plane"):
                 img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, fg_masks, bg_ray_lst = bg_info
@@ -401,6 +403,10 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=False, 
 
     visualizer.print_losses(count)
     psnr = visualizer.get_psnr(opt.test_color_loss_items[0])
+    # try:
+    #     psnr = visualizer.get_psnr(opt.test_color_loss_items[0])
+    # except:
+    #     psnr = 0
     # visualizer.reset()
 
     print('--------------------------------Finish Test Rendering--------------------------------')
@@ -981,7 +987,7 @@ def main():
                 model.opt.is_train = 1
                 del test_dataset
 
-            if total_steps == 10000 or (total_steps % opt.test_freq == 0 and total_steps < (opt.maximum_step - 1) and total_steps > 0):
+            if (total_steps % opt.test_freq == 0 and total_steps < (opt.maximum_step - 1) and total_steps > 0):
                 torch.cuda.empty_cache()
                 test_dataset = create_test_dataset(test_opt, opt, total_steps, test_num_step=opt.test_num_step)
                 model.opt.is_train = 0

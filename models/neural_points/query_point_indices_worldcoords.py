@@ -437,6 +437,103 @@ class lighting_fast_querier():
                     }
                 }
                 
+                __global__ void query_neigh_along_ray_layered_semantic_guidance(
+                    const float* in_data,   // #point cloud data input:[1,4242263,3]
+                    const int* in_data_label,//[1,4242263,1] neural point label information
+                    const int B,            //1
+                    const int SR,               // num. samples along each ray 24
+                    const int R,               // e.g., 784
+                    const int max_o,            // 610000
+                    const int P,                //26 超参；P：一个体素中最多的点云数量
+                    const int K,                // max num.  neighbors
+                    const int grid_size_vol,    //46298616 = a*b*c
+                    const float radius_limit2,  //radius_limit_np = 0.032  radius_limit2 = 0.032**2
+                    const float *d_coord_shift,     // 3[-1.6265191,-1.9573721,-3.291426]
+                    const int *d_grid_size,         //[344 377 357]
+                    const float *d_voxel_size,      // 3[0.016 0.016 0.016]
+                    const int *kernel_size,         // [3 3 3]
+                    const int *occ_numpnts,    // B * max_o = 610000
+                    const int *occ_2_pnts,            // B * max_o * P [1,610000,26]某个occ中每个点云的index
+                    const int *coor_2_occ,      // B * 400 * 400 * 400  [1,344,377,357]：init=-1；存放的是occ的index(0~610000)
+                    const float *sample_loc,       // B * R * SR * 3 [1,784,24,3],init:all-0，存某个pixel需要采样的点的坐标
+                    const int *sample_loc_mask,       // B * R * SR  [1,784,24],init:all-0，存sample_loc_tensor的msk
+                    const int *sample_pidx_tensor, //new[1,784,24,1],label
+                    int *sample_pidx,       // B * R * SR * K [1,784,24,8]init-all -1;8，即K，一个查询点的max num.  neighbors；返回每个像素（784个）所要query的每个点（24个）的真实邻居点（最临近的8点）的pid
+                    unsigned long seconds,
+                    const int NN
+                ) {
+                    int index =  blockIdx.x * blockDim.x + threadIdx.x; // index of gpu thread
+                    int i_batch = index / (R * SR);  // index of batch
+                    if (i_batch >= B || sample_loc_mask[index] <= 0) { return; }
+                    float centerx = sample_loc[index * 3];
+                    float centery = sample_loc[index * 3 + 1];
+                    float centerz = sample_loc[index * 3 + 2];
+                    int center_label = sample_pidx_tensor[index];
+                    //cauc bounding box
+                    int frustx = (int) floor((centerx - d_coord_shift[0]) / d_voxel_size[0]);//这个点云所在的体素场的坐标frustx,y,z
+                    int frusty = (int) floor((centery - d_coord_shift[1]) / d_voxel_size[1]);
+                    int frustz = (int) floor((centerz - d_coord_shift[2]) / d_voxel_size[2]);
+                                        
+                    centerx = sample_loc[index * 3];
+                    centery = sample_loc[index * 3 + 1];
+                    centerz = sample_loc[index * 3 + 2];
+                                        
+                    int kid = 0, far_ind = 0, coor_z, coor_y, coor_x;
+                    float far2 = 0.0;
+                    float xyz2Buffer[KN];
+                    //按照kernel_size在occ内遍历[344 377 357]
+                    for (int layer = 0; layer < (kernel_size[0]+1)/2; layer++){                        
+                        for (int x = max(-frustx, -layer); x < min(d_grid_size[0] - frustx, layer + 1); x++) {
+                            coor_x = frustx + x;
+                            for (int y = max(-frusty, -layer); y < min(d_grid_size[1] - frusty, layer + 1); y++) {
+                                coor_y = frusty + y;
+                                for (int z =  max(-frustz, -layer); z < min(d_grid_size[2] - frustz, layer + 1); z++) {
+                                    coor_z = z + frustz;
+                                    if (max(abs(z), max(abs(x), abs(y))) != layer) continue;
+                                    int coor_indx_b = i_batch * grid_size_vol + coor_x * (d_grid_size[1] * d_grid_size[2]) + coor_y * d_grid_size[2] + coor_z;
+                                    int occ_indx = coor_2_occ[coor_indx_b] + i_batch * max_o;//[1,344,377,357]，从中取出occ的index(0-610000)
+                                    if (occ_indx >= 0) {//if occ_indx = -1则里面没点
+                                        for (int g = 0; g < min(P, occ_numpnts[occ_indx]); g++) {//occ_numpnts:某个occ中点云的数量，P超参：最大的点云数量
+                                            int pidx = occ_2_pnts[occ_indx * P + g];//occ_2_pnts[1,610000,26]，从每个occ中取出每个点的index
+                                            int label_v = in_data_label[pidx];
+                                            if(label_v == center_label)
+                                            {
+                                                float x_v = (in_data[pidx*3]-centerx);//in_data[pidx*3]：点云坐标；centerx:query点的坐标
+                                                float y_v = (in_data[pidx*3 + 1]-centery);
+                                                float z_v = (in_data[pidx*3 + 2]-centerz);
+                                                float xyz2 = x_v * x_v + y_v * y_v + z_v * z_v;//点到query点距离**2
+                                                if ((radius_limit2 == 0 || xyz2 <= radius_limit2)){//如果是在radius_limit2的范围内
+                                                    if (kid++ < K) {//K:max num.  neighbors;kid:current num neighbors
+                                                        sample_pidx[index * K + kid - 1] = pidx;//sample_pidx存相应的pidx
+                                                        xyz2Buffer[kid-1] = xyz2;//缓存xyz距离
+                                                        if (xyz2 > far2){
+                                                            far2 = xyz2;//存储最远点的距离和index
+                                                            far_ind = kid - 1;
+                                                        }
+                                                    } else {//如果已经采集满了，去替换掉最远的那个点，即这8个点已经是离query点最近的点
+                                                        if (xyz2 < far2) {
+                                                            sample_pidx[index * K + far_ind] = pidx;
+                                                            xyz2Buffer[far_ind] = xyz2;
+                                                            far2 = xyz2;
+                                                            for (int i = 0; i < K; i++) {
+                                                                if (xyz2Buffer[i] > far2) {
+                                                                    far2 = xyz2Buffer[i];
+                                                                    far_ind = i;
+                                                                }
+                                                            }
+                                                        } 
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (kid >= K) break;
+                    }
+                }
+
                 
                 __global__ void query_neigh_along_ray_layered(
                     const float* in_data,   // #point cloud data input:[1,4242263,3]
@@ -536,7 +633,9 @@ class lighting_fast_querier():
         query_along_ray = mod.get_function("query_neigh_along_ray_layered") if self.opt.NN > 0 else mod.get_function("query_rand_along_ray")
         # TODO: need to implementation query_neigh_along_ray_layered_semantic_guidance with cuda
         if self.opt.semantic_guidance == 1:
+            print("SAMPLER!!!!!query_neigh_along_ray_layered_semantic_guidance")
             query_along_ray = mod.get_function("query_neigh_along_ray_layered_semantic_guidance")
+
         return claim_occ, map_coor2occ, fill_occ2pnts, mask_raypos, get_shadingloc, query_along_ray
 
 
@@ -696,7 +795,9 @@ class lighting_fast_querier():
                 Holder(sample_loc_mask_tensor),#[1,784,24],init:all-0，存sample_loc_tensor的msk
                 block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1)
             )
-            sample_semantic_tensor = torch.masked_select(raylabel_tensor,ray_mask_tensor[..., None, None].expand(-1, -1, D, 1)).reshape(B, R,D, 1)[:, :, :SR, :]
+            # TODO: when testing ,this has a bug ,dont forget to fix it.
+
+            sample_semantic_tensor = torch.masked_select(raylabel_tensor,ray_mask_tensor[..., None, None].expand(-1, -1, raylabel_tensor.shape[2], 1)).reshape(B, R, raylabel_tensor.shape[2], 1)[:, :, :SR, :]
             # torch.cuda.synchronize()
             # print("shadingloc_mask_tensor", torch.sum(sample_loc_mask_tensor, dim=-1), torch.sum(torch.sum(sample_loc_mask_tensor, dim=-1) > 0), torch.sum(sample_loc_mask_tensor > 0))
             # shadingloc_masked = torch.masked_select(sample_loc_tensor, sample_loc_mask_tensor[..., None] > 0)

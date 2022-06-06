@@ -630,8 +630,8 @@ class BaseRenderingModel(BaseModel):
         #zero_one regularization losses
         for i, name in enumerate(opt.zero_one_loss_items):
             if name not in self.output:
-                print(fmt.YELLOW + "No required zero_one loss item: " + name +
-                      fmt.END)
+                # print(fmt.YELLOW + "No required zero_one loss item: " + name +fmt.END)
+                pass
                 # setattr(self, "loss_" + name, torch.zeros([1], device="cuda", dtype=torch.float32))
             else:
                 val = torch.clamp(self.output[name], self.opt.zero_epsilon,
@@ -640,7 +640,6 @@ class BaseRenderingModel(BaseModel):
                 loss = torch.mean(torch.log(val) + torch.log(1 - val))
                 self.loss_total += loss * opt.zero_one_loss_weights[i]
                 setattr(self, "loss_" + name, loss)
-
         # l2 square regularization losses
         for i, name in enumerate(opt.l2_size_loss_items):
             if name not in self.output:

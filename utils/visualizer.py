@@ -149,7 +149,9 @@ class Visualizer:
     def accumulate_losses(self, losses):
         self.acc_iterations += 1
         for k, v in losses.items():
-            if k not in self.acc_losses:
+            if v is None :
+                v = 0
+            if k not in self.acc_losses :
                 self.acc_losses[k] = 0
             self.acc_losses[k] += v
             if k.endswith('raycolor'):
@@ -160,6 +162,7 @@ class Visualizer:
 
 
     def get_psnr(self, key):
+
         return self.acc_losses[key + "_psnr"] / self.acc_iterations
 
     def print_losses(self, total_steps):
