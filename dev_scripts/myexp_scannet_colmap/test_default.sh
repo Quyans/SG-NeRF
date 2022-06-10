@@ -1,8 +1,9 @@
 #!/bin/bash
+
 novel_cam_trajectory="1"
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='31-scene0113-clockwiseangle_sparseview_colorgrad_sparsepcd_edit'
+name='40-scene0113-30+semantic_guidance_raylabel0+vlabel0+random_sampler_edit'
 
 resume_iter=latest # 20000 #latest
 data_root="${nrDataRoot}/scannet/scans/"

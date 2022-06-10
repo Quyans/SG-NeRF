@@ -2,7 +2,7 @@
 
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='30-scene0113-clockwiseangle_sparseview_colorgrad_sparsepcd'
+name="33-scene0113-30+semantic_guidance_edit"
 
 resume_iter=best #latest
 

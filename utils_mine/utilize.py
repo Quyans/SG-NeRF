@@ -31,7 +31,6 @@ def merge_dataset(path1,path2):#path1:basepath,make path2 move to path1
             shutil.copy(ori_color_path,new_color_path)
             shutil.copy(ori_depth_path, new_depth_path)
             shutil.copy(ori_pose_path, new_pose_path)
-
 def cauc_RotationMatrix(alpha,beta,gamma,rotmatrix = np.eye(3)):
     '''
     clockwise;
@@ -61,7 +60,6 @@ def cauc_RotationMatrix(alpha,beta,gamma,rotmatrix = np.eye(3)):
     ])
     R = Rz@Ry@Rx@rotmatrix
     return R
-
 def cauc_transformationMatrix(rotationMatrix,posVector):
 
     # posVector = np.array(posVector)
@@ -120,7 +118,6 @@ def visualize_dir_vector():
 
     ax.axis(xmin=-1,xmax=1,ymin=-1,ymax=1)
     plt.show()
-
 def inverse_transformationMatirx(transformationMatrix):
     '''
     p_new = R*p_old + t
@@ -147,7 +144,6 @@ def load_transformationMatrix_from_meshlabproject(path):
     rot_Mat = np.array([float(i) for i in rot_Mat[:-1]]).reshape((4,4))[:3,:3]
     transformationMatrix = cauc_transformationMatrix(rot_Mat,tran_Vector)
     return transformationMatrix
-
 def load_camera_pose(filedir,filename = '0.txt'):
     cam_pos_path = os.path.join(filedir,filename)
     mat = np.loadtxt(cam_pos_path)

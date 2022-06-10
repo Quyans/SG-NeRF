@@ -415,12 +415,14 @@ class lighting_fast_querier():
         
                 __global__ void get_shadingloc(
                     const float *raypos,    // # [1, 784, 400, 3]要采样要query的点的世界坐标
+                    const int *raylabel,//new![1,784,400,1]
                     const int *raypos_mask,    // #[1,784,400],沿光线这是第几个被采样的点-1 -1 0 1 -1 -1 1 2 3 4 5 -1 -1 -1 ...
                     const int B,       // 1
                     const int R,       // 784
                     const int D,       // 400
                     const int SR,       // 24 一条ray一次性最多采样的点数
                     float *sample_loc,       // #[1,784,24,3],init:all-0，存某个pixel需要采样的点的坐标
+                    int *sample_label, //new![1,784,24]!!
                     int *sample_loc_mask       // [1,784,24],init:all-0 sample_loc的msk
                 ) {
                     int index = blockIdx.x * blockDim.x + threadIdx.x; // index of gpu thread
@@ -433,6 +435,7 @@ class lighting_fast_querier():
                         sample_loc[loc_inds * 3] = raypos[index * 3];
                         sample_loc[loc_inds * 3 + 1] = raypos[index * 3 + 1];
                         sample_loc[loc_inds * 3 + 2] = raypos[index * 3 + 2];
+                        sample_label[loc_inds] = raylabel[index];
                         sample_loc_mask[loc_inds] = 1;
                     }
                 }
@@ -496,7 +499,7 @@ class lighting_fast_querier():
                                         for (int g = 0; g < min(P, occ_numpnts[occ_indx]); g++) {//occ_numpnts:某个occ中点云的数量，P超参：最大的点云数量
                                             int pidx = occ_2_pnts[occ_indx * P + g];//occ_2_pnts[1,610000,26]，从每个occ中取出每个点的index
                                             int label_v = in_data_label[pidx];
-                                            if(label_v == center_label)
+                                            if(seconds%2==0||(center_label==label_v||label_v==0||center_label==0))
                                             {
                                                 float x_v = (in_data[pidx*3]-centerx);//in_data[pidx*3]：点云坐标；centerx:query点的坐标
                                                 float y_v = (in_data[pidx*3 + 1]-centery);
@@ -633,7 +636,7 @@ class lighting_fast_querier():
         query_along_ray = mod.get_function("query_neigh_along_ray_layered") if self.opt.NN > 0 else mod.get_function("query_rand_along_ray")
         # TODO: need to implementation query_neigh_along_ray_layered_semantic_guidance with cuda
         if self.opt.semantic_guidance == 1:
-            print("SAMPLER!!!!!query_neigh_along_ray_layered_semantic_guidance")
+
             query_along_ray = mod.get_function("query_neigh_along_ray_layered_semantic_guidance")
         if self.opt.split=='test':
             query_along_ray = mod.get_function("query_rand_along_ray")
@@ -779,26 +782,30 @@ class lighting_fast_querier():
         sample_pidx_tensor = torch.full([B, R, SR, K], -1, dtype=torch.int32, device=device)#[1,784,24,8]
         if R > 0:#True
             raypos_tensor = torch.masked_select(raypos_tensor, ray_mask_tensor[..., None, None].expand(-1, -1, D, 3)).reshape(B, R, D, 3)
+            raylabel_tensor = torch.masked_select(raylabel_tensor, ray_mask_tensor[..., None, None].expand(-1, -1, D, 1)).reshape(B, R, D, 1)
             raypos_mask_tensor = torch.masked_select(raypos_mask_tensor, ray_mask_tensor[..., None].expand(-1, -1, D)).reshape(B, R, D)
             #raypos_mask_tensor：[1,784,400] raypos_maskcum[1,784,400];对每个ray的采样点的msk累加，截止到这个采样点，这个ray之前有多少需要处理的点
             raypos_maskcum = torch.cumsum(raypos_mask_tensor, dim=-1).to(torch.int32)#[1,784,400],按ray做mask的累加
             raypos_mask_tensor = (raypos_mask_tensor * raypos_maskcum * (raypos_maskcum <= SR)) - 1#-1 -1 0 1 -1 -1 0 1 2 3 4 5 -1 -1 ...SR，一条ray一次性最多采样的点数
             sample_loc_mask_tensor = torch.zeros([B, R, SR], dtype=torch.int32, device=device)#[1,784,24]
+            sample_label_tensor = torch.zeros([B,R,SR],dtype=torch.int32,device=device)
+
             #确定好到底要sample哪些点，以comment为例，不可能每个像素sample400个点，而是由超参SR决定，SR=24，所以只取周围有点的24个query point 作为最终的query point
             self.get_shadingloc(
                 Holder(raypos_tensor),  # [1, 784, 400, 3]要采样要query的点的世界坐标
+                Holder(raylabel_tensor),
                 Holder(raypos_mask_tensor),#[1,784,400],沿光线这是第几个被采样的点-1 -1 0 1 -1 -1 1 2 3 4 5 -1 -1 -1 ...
                 np.int32(B),# 1
                 np.int32(R),#784
                 np.int32(D),# 400
                 np.int32(SR),# 24SR，一条ray一次性最多采样的点数
                 Holder(sample_loc_tensor),#[1,784,24,3],init:all-0，存某个pixel需要采样的点的坐标
+                Holder(sample_label_tensor),
                 Holder(sample_loc_mask_tensor),#[1,784,24],init:all-0，存sample_loc_tensor的msk
                 block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1)
             )
             # TODO: when testing ,this has a bug ,dont forget to fix it.
 
-            sample_semantic_tensor = torch.masked_select(raylabel_tensor,ray_mask_tensor[..., None, None].expand(-1, -1, raylabel_tensor.shape[2], 1)).reshape(B, R, raylabel_tensor.shape[2], 1)[:, :, :SR, :]
             # torch.cuda.synchronize()
             # print("shadingloc_mask_tensor", torch.sum(sample_loc_mask_tensor, dim=-1), torch.sum(torch.sum(sample_loc_mask_tensor, dim=-1) > 0), torch.sum(sample_loc_mask_tensor > 0))
             # shadingloc_masked = torch.masked_select(sample_loc_tensor, sample_loc_mask_tensor[..., None] > 0)
@@ -831,11 +838,11 @@ class lighting_fast_querier():
                     np.int32(self.opt.NN),
                     block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1))
             elif self.opt.semantic_guidance==1:
-                # add two new paras:neural point 的语义信息：points_label_tensor[1,4242263,1];神经ray的语义信息：sample_semantic_tensor[1,784,24,1],
+                # add two new paras:neural point 的语义信息：points_label_tensor[1,4242263,1];神经ray的语义信息：sample_label_tensor[1,784,24,1],
                 self.query_along_ray(
                     #TODO: Attention the paras
                     Holder(point_xyz_w_tensor),#point cloud data input:[1,4242263,3]
-                    Holder(points_label_tensor),#!!!new [1,4242263,1]
+                    Holder(points_label_tensor.to(torch.int32)),#!!!new [1,4242263,1]
                     np.int32(B),# 1
                     np.int32(SR),# 24
                     np.int32(R),# 784
@@ -853,7 +860,7 @@ class lighting_fast_querier():
                     Holder(coor_2_occ_tensor),#[1,344,377,357]：init=-1；存放的是occ的index(0~610000)
                     Holder(sample_loc_tensor),#[1,784,24,3],init:all-0，存某个pixel需要query的点的坐标
                     Holder(sample_loc_mask_tensor),#[1,784,24],init:all-0，存sample_loc_tensor的msk
-                    Holder(sample_semantic_tensor),#!!!new [1,784,24,1]
+                    Holder(sample_label_tensor.squeeze(dim=-1)),#!!!new [1,784,24]
                     Holder(sample_pidx_tensor),#B * R * SR * K [1,784,24,8]init-all -1;8，即K，一个查询点的max num.  neighbors；返回每个像素（784个）所要query的每个点（24个）的真实邻居点（最临近的8点）的pid
                     np.uint64(seconds),
                     np.int32(self.opt.NN),

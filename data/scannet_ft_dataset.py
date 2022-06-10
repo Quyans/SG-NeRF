@@ -13,6 +13,7 @@ from torch.utils.data import Dataset, DataLoader
 import torch
 import os
 from PIL import Image
+import imageio
 import h5py
 import models.mvs.mvs_utils as mvs_utils
 from data.base_dataset import BaseDataset
@@ -312,7 +313,7 @@ class ScannetFtDataset(BaseDataset):
                 self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
                 self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
             else:  # nsvf configuration
-                step=5#5
+                step=1#5
                 self.train_id_list = self.all_id_list[::step]
                 self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
         else:
@@ -578,7 +579,7 @@ class ScannetFtDataset(BaseDataset):
         image_path = os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(vid))
         # print("vid",vid)
         img = Image.open(image_path)
-        img = img.resize(self.img_wh, Image.LANCZOS)
+        img = img.resize(self.img_wh, Image.NEAREST)
         img = self.transform(img)  # (4, h, w)
         c2w = np.loadtxt(os.path.join(self.data_dir, self.scan, "exported/pose", "{}.txt".format(vid))).astype(np.float32)
         # w2c = np.linalg.inv(c2w)
@@ -593,8 +594,8 @@ class ScannetFtDataset(BaseDataset):
         semantic itm
         '''
         semantic_path = os.path.join(self.data_dir, self.scan, "label-filt/{}.png".format(vid))
-        gt_semantic_img = Image.open(semantic_path)
-        gt_semantic_img = gt_semantic_img.resize(self.img_wh, Image.LANCZOS)
+        gt_semantic_img = Image.open(semantic_path).convert(mode='I')
+        gt_semantic_img = gt_semantic_img.resize(self.img_wh, Image.NEAREST)
         gt_semantic_img = self.transform(gt_semantic_img)  # (batch, h, w)
 
         item["intrinsic"] = intrinsic

@@ -3,7 +3,7 @@
 semantic_guidance=1
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='32-scene0113-30+semantic_guidance'
+name='39-scene0113-30+semantic_guidance_raylabel0+vlabel0+random_sampler'
 
 resume_iter=best #latest
 
