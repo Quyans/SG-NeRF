@@ -428,6 +428,7 @@ def probe_hole(model, dataset, visualizer, opt, bg_info, test_steps=0, opacity_t
     add_conf = torch.zeros([0, 1], device="cuda", dtype=torch.float32)
     add_color = torch.zeros([0, 3], device="cuda", dtype=torch.float32)
     add_dir = torch.zeros([0, 3], device="cuda", dtype=torch.float32)
+    add_label = torch.zeros([0, 1], device="cuda", dtype=torch.float32)
     add_embedding = torch.zeros([0, opt.point_features_dim], device="cuda", dtype=torch.float32)
     kernel_size = model.opt.kernel_size
     if opt.prob_kernel_size is not None:
@@ -469,19 +470,21 @@ def probe_hole(model, dataset, visualizer, opt, bg_info, test_steps=0, opacity_t
             bg = data['bg_color'][None, :].cuda()
             raydir = data['raydir'].clone()
             pixel_idx = data['pixel_idx'].view(data['pixel_idx'].shape[0], -1, data['pixel_idx'].shape[3]).clone()
+            pixel_label = data['pixel_label'].view(data['pixel_label'].shape[0], -1,data['pixel_label'].shape[3]).clone()
             edge_mask = torch.zeros([height, width], dtype=torch.bool, device='cuda')
             edge_mask[pixel_idx[0, ..., 1].to(torch.long), pixel_idx[0, ..., 0].to(torch.long)] = 1
             edge_mask = edge_mask.reshape(-1) > 0
             totalpixel = pixel_idx.shape[1]
             gt_image_full = data['gt_image'].cuda()
 
-            probe_keys = ["coarse_raycolor", "ray_mask", "ray_max_sample_loc_w", "ray_max_far_dist", "ray_max_shading_opacity", "shading_avg_color", "shading_avg_dir", "shading_avg_conf", "shading_avg_embedding"]
+            probe_keys = ["coarse_raycolor", "ray_mask", "ray_max_sample_loc_w", "ray_max_sample_label","ray_max_far_dist", "ray_max_shading_opacity", "shading_avg_color", "shading_avg_dir", "shading_avg_conf", "shading_avg_embedding"]
             prob_maps = {}
             for k in range(0, totalpixel, chunk_size):
                 start = k
                 end = min([k + chunk_size, totalpixel])
                 data['raydir'] = raydir[:, start:end, :]
                 data["pixel_idx"] = pixel_idx[:, start:end, :]
+                data["pixel_label"] = pixel_label[:, start:end, :]
                 model.set_input(data)
                 output = model.test()
                 chunk_pixel_id = data["pixel_idx"].to(torch.long)
@@ -512,13 +515,12 @@ def probe_hole(model, dataset, visualizer, opt, bg_info, test_steps=0, opacity_t
                 neighboring_miss_mask += far_ray_mask.squeeze(-1)
             neighboring_miss_mask = (prob_maps["ray_mask"].squeeze(-1) > 0) * neighboring_miss_mask * (prob_maps["ray_max_shading_opacity"].squeeze(-1) > opacity_thresh) > 0
 
-
+            add_label = torch.cat([add_label, prob_maps["ray_max_sample_label"][neighboring_miss_mask]], dim=0)
             add_xyz = torch.cat([add_xyz, prob_maps["ray_max_sample_loc_w"][neighboring_miss_mask]], dim=0)
             add_conf = torch.cat([add_conf, prob_maps["shading_avg_conf"][neighboring_miss_mask]], dim=0) * opt.prob_mul if prob_maps["shading_avg_conf"] is not None else None
             add_color = torch.cat([add_color, prob_maps["shading_avg_color"][neighboring_miss_mask]], dim=0) if prob_maps["shading_avg_color"] is not None else None
             add_dir = torch.cat([add_dir, prob_maps["shading_avg_dir"][neighboring_miss_mask]], dim=0) if prob_maps["shading_avg_dir"] is not None else None
             add_embedding = torch.cat([add_embedding, prob_maps["shading_avg_embedding"][neighboring_miss_mask]], dim=0)
-
             if len(add_xyz) > -1:
                 output = prob_maps["coarse_raycolor"].permute(2,0,1)[None, None,...]
                 visualizer.save_ref_views({"images": output}, i, subdir="prob_img_{:04d}".format(test_steps))
@@ -535,7 +537,7 @@ def probe_hole(model, dataset, visualizer, opt, bg_info, test_steps=0, opacity_t
     del visualizer, prob_maps
     model.opt.prob = 0
 
-    return add_xyz, add_embedding, add_color, add_dir, add_conf
+    return add_xyz, add_embedding, add_color, add_dir, add_conf,add_label
 
 def bloat_inds(inds, shift, height, width):
     inds = inds[:,None,:]
@@ -880,7 +882,7 @@ def main():
                         else:
                             prob_dataset = create_comb_dataset(test_opt, opt, total_steps, test_num_step=1)
                         model.eval()
-                        add_xyz, add_embedding, add_color, add_dir, add_conf = probe_hole(model, prob_dataset, Visualizer(prob_opt), prob_opt, None, test_steps=total_steps, opacity_thresh=opt.prob_thresh)
+                        add_xyz, add_embedding, add_color, add_dir, add_conf,add_label = probe_hole(model, prob_dataset, Visualizer(prob_opt), prob_opt, None, test_steps=total_steps, opacity_thresh=opt.prob_thresh)
                         torch.cuda.empty_cache()
                         torch.cuda.synchronize()
                         if opt.prob_mode != 0:
@@ -889,7 +891,7 @@ def main():
                         if len(add_xyz) > 0:
                             print("len(add_xyz)", len(add_xyz))
                             model.clean_optimizer_scheduler()
-                            model.grow_points(add_xyz, add_embedding, add_color, add_dir, add_conf)
+                            model.grow_points(add_xyz, add_embedding, add_color, add_dir, add_conf,add_label)
                             length_added = len(add_xyz)
                             del add_xyz, add_embedding, add_color, add_dir, add_conf
                             torch.cuda.empty_cache()

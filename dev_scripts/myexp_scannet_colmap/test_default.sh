@@ -3,7 +3,7 @@
 novel_cam_trajectory="1"
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='40-scene0113-30+semantic_guidance_raylabel0+vlabel0+random_sampler_edit'
+name='48*-scene0113-41-nosemanticguidance+sparseview_edit'
 
 resume_iter=latest # 20000 #latest
 data_root="${nrDataRoot}/scannet/scans/"
@@ -45,11 +45,11 @@ shpnt_jitter="passfunc" #"uniform" # uniform gaussian
 
 which_agg_model="viewmlp"
 apply_pnt_mask=1
-shading_feature_mlp_layer0=1 #2
+shading_feature_mlp_layer0=1 #1
 shading_feature_mlp_layer1=2 #2
-shading_feature_mlp_layer2=0 #1
-shading_feature_mlp_linear=0
-shading_feature_mlp_layer3=0 #1
+shading_feature_mlp_layer2=0 #0
+shading_feature_mlp_linear=0 #0
+shading_feature_mlp_layer3=0 #0
 shading_feature_mlp_layer4=1 #1
 
 shading_alpha_mlp_layer=1

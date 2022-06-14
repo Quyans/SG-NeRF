@@ -238,8 +238,8 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
         return self.net_mvs.query_embedding(HDWD, cam_xyz, photometric_confidence, img_feats, c2ws, w2cs, intrinsics, cam_vid, pointdir_w=pointdir_w)
 
 
-    def grow_points(self, points_xyz, points_embedding, points_color, points_dir, points_conf):
-        self.neural_points.grow_points(points_xyz, points_embedding, points_color, points_dir, points_conf)
+    def grow_points(self, points_xyz, points_embedding, points_color, points_dir, points_conf,add_label):
+        self.neural_points.grow_points(points_xyz, points_embedding, points_color, points_dir, points_conf,add_label)
         # self.neural_points.reset_querier()
 
     def cleanup(self):

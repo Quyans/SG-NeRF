@@ -381,11 +381,11 @@ class NeuralPoints(nn.Module):
         print("@@@@@@@@@  pruned {}/{}".format(torch.sum(mask==0), mask.shape[0]))
 
 
-    def grow_points(self, add_xyz, add_embedding, add_color, add_dir, add_conf, add_eulers=None, add_Rw2c=None):
+    def grow_points(self, add_xyz, add_embedding, add_color, add_dir, add_conf, add_label,add_eulers=None, add_Rw2c=None):
         # print(self.xyz.shape, self.points_conf.shape, self.points_embeding.shape, self.points_dir.shape, self.points_color.shape)
         self.xyz = nn.Parameter(torch.cat([self.xyz, add_xyz], dim=0))
         self.xyz.requires_grad = self.opt.xyz_grad > 0
-
+        self.points_label = nn.Parameter(torch.cat([self.points_label,add_label],dim=0))
         if self.points_embeding is not None:
             self.points_embeding = nn.Parameter(torch.cat([self.points_embeding, add_embedding[None, ...]], dim=1))
             self.points_embeding.requires_grad = self.opt.feat_grad > 0
@@ -593,7 +593,7 @@ class NeuralPoints(nn.Module):
         #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
         #vsize_np[0.008 0.008 0.008]
         #ranges_np[-1.6265 -1.9573 -3.2914 3.868 4.070 2.417]
-        sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = self.querier.query_points(pixel_idx_tensor,pixel_label_tensor, point_xyz_pers_tensor, self.xyz[None,...],self.points_label[None,...], actual_numpoints_tensor, h, w, intrinsic, near_plane, far_plane, ray_dirs_tensor,ray_label_tensor, cam_pos_tensor, cam_rot_tensor)
+        sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor,sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = self.querier.query_points(pixel_idx_tensor,pixel_label_tensor, point_xyz_pers_tensor, self.xyz[None,...],self.points_label[None,...], actual_numpoints_tensor, h, w, intrinsic, near_plane, far_plane, ray_dirs_tensor,ray_label_tensor, cam_pos_tensor, cam_rot_tensor)
         # sample_pidx_tensor[1,784,24,8];sample_loc_tensor[1,784,24,3];sample_loc_w_tensor[1,784,24,3];sample_ray_dirs_tensor[1,784,24,3];ray_mask_tensor[1,784]
         #loc_w ? whats meaning
         B, _, SR, K = sample_pidx_tensor.shape#B1 SR24 K 8
@@ -749,7 +749,7 @@ class NeuralPoints(nn.Module):
         # sample_ray_dirs_tensor[1,784,24,3]存dir,24个点的3d方向向量相同
         #vsize：voxel size [0.008 0.008 0.008]
         #pixel_label!新加入的[1,784,1]Label ray
-        sample_pidx, sample_loc, ray_mask_tensor, point_xyz_pers_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, vsize = self.get_point_indices(inputs, camrotc2w, campos, pixel_idx,pixel_label, torch.min(near_plane).cpu().numpy(), torch.max(far_plane).cpu().numpy(), torch.max(h).cpu().numpy(), torch.max(w).cpu().numpy(), intrinsic.cpu().numpy()[0], vox_query=self.opt.NN<0)
+        sample_pidx, sample_loc,ray_mask_tensor, point_xyz_pers_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, vsize = self.get_point_indices(inputs, camrotc2w, campos, pixel_idx,pixel_label, torch.min(near_plane).cpu().numpy(), torch.max(far_plane).cpu().numpy(), torch.max(h).cpu().numpy(), torch.max(w).cpu().numpy(), intrinsic.cpu().numpy()[0], vox_query=self.opt.NN<0)
         sample_pnt_mask = sample_pidx >= 0#[1,784,24,8]，colmap点云的msk
         B, R, SR, K = sample_pidx.shape#B：batch，R：sampled_pixel;SR:24一个ray最多query的点 K: 8一个query点的max num neighbour
         sample_pidx = torch.clamp(sample_pidx, min=0).view(-1).long()#sample_pidx = 150528
@@ -762,6 +762,12 @@ class NeuralPoints(nn.Module):
         sampled_conf = None if self.points_conf is None else torch.index_select(self.points_conf, 1, sample_pidx).view(B, R, SR, K, self.points_conf.shape[2])
         # [1,784,24,8,1]基本上全是1
         sampled_Rw2c = self.Rw2c if self.Rw2c.dim() == 2 else torch.index_select(self.Rw2c, 0, sample_pidx).view(B, R, SR, K, self.Rw2c.shape[1], self.Rw2c.shape[2])
+
+        sampled_label = None if self.points_label[None,...] is None else torch.index_select(self.points_label[None,...], 1, sample_pidx).view(B, R, SR, K, self.points_label[None,...].shape[2])
+
+
+
+
         #[3,3]-ones(3,3)
         # filepath = "./sampled_xyz_full.txt"
         # np.savetxt(filepath, self.xyz.reshape(-1, 3).detach().cpu().numpy(), delimiter=";")
@@ -774,4 +780,4 @@ class NeuralPoints(nn.Module):
         # if self.points_embeding.grad is not None:
         #     print("points_embeding grad:", self.points_embeding.requires_grad, torch.max(self.points_embeding.grad))
         # print("points_embeding 3", torch.max(self.points_embeding), torch.min(self.points_embeding))
-        return sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding[..., 6:], sampled_embedding[..., 3:6], sampled_embedding[..., :3], sample_pnt_mask, sample_loc, sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize, self.grid_vox_sz
+        return sampled_color,sampled_label,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding[..., 6:], sampled_embedding[..., 3:6], sampled_embedding[..., :3], sample_pnt_mask, sample_loc, sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize, self.grid_vox_sz

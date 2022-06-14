@@ -119,7 +119,7 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
 
         if self.opt.prob == 1 and "ray_max_shading_opacity" in output:#False
             # print("ray_inds", ray_inds.shape, torch.sum(output["ray_mask"]))
-            output = self.unmask(ray_inds, output, ["ray_max_sample_loc_w", "ray_max_shading_opacity", "shading_avg_color", "shading_avg_dir", "shading_avg_conf", "shading_avg_embedding", "ray_max_far_dist"], B, OR)
+            output = self.unmask(ray_inds, output, ["ray_max_sample_loc_w","ray_max_sample_label","ray_max_shading_opacity", "shading_avg_color", "shading_avg_dir", "shading_avg_conf", "shading_avg_embedding", "ray_max_far_dist"], B, OR)
         return output
 
     def unmask(self, ray_inds, output, names, B, OR):
@@ -279,7 +279,7 @@ class NeuralPointsRayMarching(nn.Module):
         # ray_mask_tensor[1,784];
         # vsize=[0.0008,0.0008,0.0008]；
         # grid_vox_sz = 0
-        sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, ray_mask_tensor, vsize, grid_vox_sz = self.neural_points({"pixel_idx": pixel_idx, "camrotc2w": camrotc2w, "campos": campos, "near": near, "far": far,"focal": focal, "h": h, "w": w, "intrinsic": intrinsic,"gt_image":gt_image, "raydir":raydir,"pixel_label":pixel_label})
+        sampled_color, sampled_label,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w,sample_ray_dirs, ray_mask_tensor, vsize, grid_vox_sz = self.neural_points({"pixel_idx": pixel_idx, "camrotc2w": camrotc2w, "campos": campos, "near": near, "far": far,"focal": focal, "h": h, "w": w, "intrinsic": intrinsic,"gt_image":gt_image, "raydir":raydir,"pixel_label":pixel_label})
         #decoded_features[1,784,24,4]->(color+alpha)
         #ray_valid[1,784,24]
         #weight[1,784,24,8]
@@ -350,7 +350,8 @@ class NeuralPointsRayMarching(nn.Module):
             if weight is not None:
                 output["ray_max_shading_opacity"], opacity_ind = torch.max(output["coarse_point_opacity"], dim=-1, keepdim=True)
                 opacity_ind=opacity_ind[..., None] # 1, 1024, 1, 1
-
+                sampled_label = torch.mode(sampled_label,3)[0] #agg most label in neighbour
+                output["ray_max_sample_label"] = torch.gather(sampled_label, 2, opacity_ind.expand(-1, -1, -1,sampled_label.shape[-1])).squeeze(2)  # 1, 1024, 24, 3 -> 1, 1024, 1
                 output["ray_max_sample_loc_w"] = torch.gather(sample_loc_w, 2, opacity_ind.expand(-1, -1, -1, sample_loc_w.shape[-1])).squeeze(2) # 1, 1024, 24, 3 -> 1, 1024, 3
                 weight = torch.gather(weight*conf_coefficient, 2, opacity_ind.expand(-1, -1, -1, weight.shape[-1])).squeeze(2)[..., None] # 1, 1024, 8
                 opacity_ind = opacity_ind[...,None]
@@ -371,6 +372,7 @@ class NeuralPointsRayMarching(nn.Module):
                 output.update({
                     "ray_max_shading_opacity": torch.zeros([0, 0, 1, 1], device="cuda"),
                     "ray_max_sample_loc_w": torch.zeros([0, 0, 3], device="cuda"),
+                    "ray_max_sample_label": torch.zeros([0, 0, 1], device="cuda"),
                     "ray_max_far_dist": torch.zeros([0, 0, 1], device="cuda"),
                     "shading_avg_color": torch.zeros([0, 0, 3], device="cuda"),
                     "shading_avg_dir": torch.zeros([0, 0, 3], device="cuda"),

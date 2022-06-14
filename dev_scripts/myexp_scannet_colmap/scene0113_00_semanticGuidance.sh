@@ -3,7 +3,7 @@
 semantic_guidance=1
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='39-scene0113-30+semantic_guidance_raylabel0+vlabel0+random_sampler'
+name='51-scene0113-41-semanticguidance+sparseview+growingsemanticpoint'
 
 resume_iter=best #latest
 
@@ -17,8 +17,8 @@ dir_grad=0
 color_grad=1
 vox_res=900
 normview=0
-prune_thresh=0.1
-prune_iter=100000 #10000
+prune_thresh=-1
+prune_iter=-1 #10000
 
 feedforward=0
 ref_vid=0
@@ -130,7 +130,7 @@ test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=100
 test_num_step=50
 
-prob_freq=500001 #10001
+prob_freq=10001 #10001
 prob_num_step=100
 prob_kernel_size=" 3 3 3 1 1 1 "
 prob_tiers=" 40000 120000 "

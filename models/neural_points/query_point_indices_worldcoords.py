@@ -85,7 +85,7 @@ class lighting_fast_querier():
         #sample_loc_w_tensor[1,784,24,3],init:all-0，存某个pixel需要query的点的坐标
         #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
         raylabel_tensor = ray_label_tensor[...,None,:].repeat(1,1,raypos_tensor.shape[2],1)
-        sample_pidx_tensor, sample_loc_w_tensor, ray_mask_tensor = self.query_grid_point_index(h, w, pixel_idx_tensor,pixel_label_tensor,raypos_tensor, raylabel_tensor,point_xyz_w_tensor,points_label_tensor,actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, self.opt.SR, self.opt.K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, self.opt.max_o, self.opt.P, radius_limit_np, depth_limit_np, range_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor, kMaxThreadsPerBlock=self.opt.gpu_maxthr)
+        sample_pidx_tensor, sample_loc_w_tensor,ray_mask_tensor = self.query_grid_point_index(h, w, pixel_idx_tensor,pixel_label_tensor,raypos_tensor, raylabel_tensor,point_xyz_w_tensor,points_label_tensor,actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, self.opt.SR, self.opt.K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, self.opt.max_o, self.opt.P, radius_limit_np, depth_limit_np, range_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor, kMaxThreadsPerBlock=self.opt.gpu_maxthr)
         sample_ray_dirs_tensor = torch.masked_select(ray_dirs_tensor, ray_mask_tensor[..., None]>0).reshape(ray_dirs_tensor.shape[0],-1,3)[...,None,:].expand(-1, -1, self.opt.SR, -1).contiguous()
         #sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
         #elf.w2pers(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor) sample_loc_w_tensor转了坐标系
@@ -94,7 +94,7 @@ class lighting_fast_querier():
         #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
         #vsize_np[0.008 0.008 0.008]
         #ranges_np[-1.6265 -1.9573 -3.2914 3.868 4.070 2.417]
-        return sample_pidx_tensor, self.w2pers(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor), sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize_np, ranges_np
+        return sample_pidx_tensor, self.w2pers(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor), sample_loc_w_tensor,sample_ray_dirs_tensor, ray_mask_tensor, vsize_np, ranges_np
 
 
     def w2pers(self, point_xyz_w, camrotc2w, campos):
@@ -867,7 +867,7 @@ class lighting_fast_querier():
                     block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1))
             # torch.cuda.synchronize()
             # print("point_xyz_w_tensor",point_xyz_w_tensor.shape)
-            # queried_masked = point_xyz_w_tensor[0][sample_pidx_tensor.reshape(-1).to(torch.int64), :]
+            # queried_masked = point_xyz_w_tensor[0][sample_pidx_tensor.reshape(-1).to(torch.int64),` :]
             # save_points(queried_masked.reshape(-1, 3), "./", "queried_pnts{}".format(self.count))
             # print("valid ray",  torch.sum(torch.sum(sample_loc_mask_tensor, dim=-1) > 0))
             masked_valid_ray = torch.sum(sample_pidx_tensor.view(B, R, -1) >= 0, dim=-1) > 0
@@ -880,7 +880,7 @@ class lighting_fast_querier():
         #sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
         #sample_loc_tensor[1,784,24,3],init:all-0，存某个pixel需要query的点的坐标
         #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
-        return sample_pidx_tensor, sample_loc_tensor, ray_mask_tensor.to(torch.int8)
+        return sample_pidx_tensor, sample_loc_tensor,ray_mask_tensor.to(torch.int8)
 def load_pnts(point_path, point_num):
     with open(point_path, 'rb') as f:
         print("point_file_path################", point_path)
