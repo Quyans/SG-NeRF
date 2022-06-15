@@ -499,7 +499,7 @@ class lighting_fast_querier():
                                         for (int g = 0; g < min(P, occ_numpnts[occ_indx]); g++) {//occ_numpnts:某个occ中点云的数量，P超参：最大的点云数量
                                             int pidx = occ_2_pnts[occ_indx * P + g];//occ_2_pnts[1,610000,26]，从每个occ中取出每个点的index
                                             int label_v = in_data_label[pidx];
-                                            if(seconds%2==0||(center_label==label_v||label_v==0||center_label==0))
+                                            if((center_label==label_v||label_v==0||center_label==0))
                                             {
                                                 float x_v = (in_data[pidx*3]-centerx);//in_data[pidx*3]：点云坐标；centerx:query点的坐标
                                                 float y_v = (in_data[pidx*3 + 1]-centery);
@@ -639,7 +639,7 @@ class lighting_fast_querier():
 
             query_along_ray = mod.get_function("query_neigh_along_ray_layered_semantic_guidance")
         if self.opt.split=='test':
-            query_along_ray = mod.get_function("query_rand_along_ray")
+            query_along_ray = mod.get_function("query_neigh_along_ray_layered")
         return claim_occ, map_coor2occ, fill_occ2pnts, mask_raypos, get_shadingloc, query_along_ray
 
 

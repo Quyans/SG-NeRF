@@ -3,8 +3,7 @@
 semantic_guidance=1
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='51-scene0113-41-semanticguidance+sparseview+growingsemanticpoint'
-
+name='50-scene0113-strictSGS+sparseview+growingsemanticpoint'
 resume_iter=best #latest
 
 data_root="${nrDataRoot}/scannet/scans/"
@@ -116,7 +115,7 @@ gpu_ids='0'
 checkpoints_dir="${nrCheckpoint}/scannet/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
-save_iter_freq=5000
+save_iter_freq=10000 #5000
 save_point_freq=10000 #301840 #1
 maximum_step=500000 #500000 #250000 #800000
 
@@ -130,7 +129,7 @@ test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=100
 test_num_step=50
 
-prob_freq=10001 #10001
+prob_freq=10000 #10001
 prob_num_step=100
 prob_kernel_size=" 3 3 3 1 1 1 "
 prob_tiers=" 40000 120000 "
