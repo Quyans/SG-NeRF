@@ -281,7 +281,7 @@ class NeuralPoints(nn.Module):
             # np.savetxt(filepath, self.xyz.reshape(-1, 3).detach().cpu().numpy(), delimiter=";")
 
             if checkpoint:#谁要学，nn.par谁，反正都存pth里面，这个实现方式还是不错的
-                self.points_label = nn.Parameter(saved_features["neural_points.points_label"], requires_grad=False).to(torch.int32) if "neural_points.points_label" in saved_features else None
+                self.points_label = nn.Parameter(saved_features["neural_points.points_label"], requires_grad=False)
                 self.points_embeding = nn.Parameter(saved_features["neural_points.points_embeding"]) if "neural_points.points_embeding" in saved_features else None
                 print("self.points_embeding", self.points_embeding.shape)
                 # points_conf = saved_features["neural_points.points_conf"] if "neural_points.points_conf" in saved_features else None
@@ -378,10 +378,6 @@ class NeuralPoints(nn.Module):
         if self.Rw2c is not None and self.Rw2c.dim() > 2:
             self.Rw2c = nn.Parameter(self.Rw2c[mask, :])
             self.Rw2c.requires_grad = False
-        #Hasn't test if correctly
-        if self.points_label is not None :
-            self.points_label = nn.Parameter(self.points_label[mask, :])
-            self.points_label.requires_grad = False
         print("@@@@@@@@@  pruned {}/{}".format(torch.sum(mask==0), mask.shape[0]))
 
 
@@ -389,7 +385,7 @@ class NeuralPoints(nn.Module):
         # print(self.xyz.shape, self.points_conf.shape, self.points_embeding.shape, self.points_dir.shape, self.points_color.shape)
         self.xyz = nn.Parameter(torch.cat([self.xyz, add_xyz], dim=0))
         self.xyz.requires_grad = self.opt.xyz_grad > 0
-        self.points_label = nn.Parameter(torch.cat([self.points_label,add_label],dim=0),requires_grad=False).to(torch.int32)
+        self.points_label = nn.Parameter(torch.cat([self.points_label,add_label],dim=0))
         if self.points_embeding is not None:
             self.points_embeding = nn.Parameter(torch.cat([self.points_embeding, add_embedding[None, ...]], dim=1))
             self.points_embeding.requires_grad = self.opt.feat_grad > 0
@@ -455,8 +451,7 @@ class NeuralPoints(nn.Module):
             # print("points_xyz", torch.min(points_xyz, dim=-2)[0], torch.max(points_xyz, dim=-2)[0])
         else:
             self.xyz = points_xyz
-            if points_label is not None:
-                self.points_label = points_label
+
             if points_conf is not None:
                 if "0" in list(self.opt.point_conf_mode):
                     points_embeding = torch.cat([points_conf, points_embeding], dim=-1)
@@ -494,7 +489,7 @@ class NeuralPoints(nn.Module):
         self.points_dir = points_dir
         self.points_conf = points_conf
         self.points_color = points_color
-        exit()
+
         if Rw2c is None:
             self.Rw2c = torch.eye(3, device=points_xyz.device, dtype=points_xyz.dtype)
         else:
@@ -767,6 +762,7 @@ class NeuralPoints(nn.Module):
         sampled_conf = None if self.points_conf is None else torch.index_select(self.points_conf, 1, sample_pidx).view(B, R, SR, K, self.points_conf.shape[2])
         # [1,784,24,8,1]基本上全是1
         sampled_Rw2c = self.Rw2c if self.Rw2c.dim() == 2 else torch.index_select(self.Rw2c, 0, sample_pidx).view(B, R, SR, K, self.Rw2c.shape[1], self.Rw2c.shape[2])
+
         sampled_label = None if self.points_label[None,...] is None else torch.index_select(self.points_label[None,...], 1, sample_pidx).view(B, R, SR, K, self.points_label[None,...].shape[2])
 
 

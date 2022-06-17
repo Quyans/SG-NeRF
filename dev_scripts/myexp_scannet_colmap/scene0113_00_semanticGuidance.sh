@@ -3,7 +3,8 @@
 semantic_guidance=1
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='50-scene0113-strictSGS+sparseview+growingsemanticpoint'
+name='58-scene0113-strictSGS_sparseview_notClockwiseangleNetwork'
+
 resume_iter=best #latest
 
 data_root="${nrDataRoot}/scannet/scans/"
@@ -73,8 +74,8 @@ shading_feature_mlp_layer0=1
 shading_feature_mlp_layer1=2
 shading_feature_mlp_layer2=0
 shading_feature_mlp_linear=0
-shading_feature_mlp_layer3=0 #1
-shading_feature_mlp_layer4=1 #0
+shading_feature_mlp_layer3=2 #0
+shading_feature_mlp_layer4=0 #1
 shading_alpha_mlp_layer=1
 shading_color_mlp_layer=4
 shading_feature_num=256
@@ -102,7 +103,7 @@ num_pos_freqs=10
 num_viewdir_freqs=4 #6
 
 random_sample='random'
-random_sample_size=64 # 32 * 32 = 1024
+random_sample_size=32 # 32 * 32 = 1024
 batch_size=1
 
 plr=0.002
@@ -115,9 +116,9 @@ gpu_ids='0'
 checkpoints_dir="${nrCheckpoint}/scannet/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
-save_iter_freq=10000 #5000
+save_iter_freq=5000
 save_point_freq=10000 #301840 #1
-maximum_step=500000 #500000 #250000 #800000
+maximum_step=200000 #500000 #250000 #800000
 
 niter=10000 #1000000
 niter_decay=10000 #250000
@@ -129,8 +130,8 @@ test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=100
 test_num_step=50
 
-prob_freq=10000 #10001
-prob_num_step=100
+prob_freq=1000000 #10001
+prob_num_step=1000000
 prob_kernel_size=" 3 3 3 1 1 1 "
 prob_tiers=" 40000 120000 "
 #prob_mode=0 # 0, n, 1 t, 10 t&n

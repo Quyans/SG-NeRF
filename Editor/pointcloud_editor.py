@@ -31,6 +31,7 @@ class PointCloudEditor:
         neural_color = np.empty([pointsize_father,3])
         neural_embeding = np.empty([pointsize_father,32])
         neural_conf = np.empty([pointsize_father])
+        neural_label = np.empty([pointsize_father])
         neural_dir = np.empty([pointsize_father,3])
         print('Scale of father neural point cloud :',(pointsize_father))
         print('Scale of child neural point cloud:',(pointsize_child))
@@ -43,6 +44,7 @@ class PointCloudEditor:
                 neural_color[idx] = npcd_father.color[i]
                 neural_embeding[idx] = npcd_father.embeding[i]
                 neural_conf[idx] = npcd_father.conf[i]
+                neural_label[idx] = npcd_father.label[i]
                 neural_dir[idx] = npcd_father.dir[i]
                 idx+=1
         neural_xyz = neural_xyz[:idx]
@@ -50,8 +52,9 @@ class PointCloudEditor:
         neural_embeding = neural_embeding[:idx]
         neural_conf = neural_conf[:idx]
         neural_dir = neural_dir[:idx]
+        neural_label = neural_label[:idx]
         print('\ncrop done...neural point cloud scale:',idx)
-        npc.load_from_var(neural_xyz,neural_embeding,neural_conf,neural_dir,neural_color)
+        npc.load_from_var(neural_xyz,neural_embeding,neural_conf,neural_dir,neural_color,neural_label)
         return npc
     def translation_point_cloud_global(self,npcd, transMatirx):#rotate by world coordinate
         res_npc = Neural_pointcloud(self.opt)
@@ -62,6 +65,7 @@ class PointCloudEditor:
         res_npc.embeding = npcd.embeding
         res_npc.conf = npcd.conf
         res_npc.dir = npcd.dir
+        res_npc.label = npcd.label
         return res_npc
     def translation_point_cloud_local(self,npcd,transMatirx):#rotate by self coordinate
         pointsize = npcd.xyz.shape[0]
@@ -74,6 +78,7 @@ class PointCloudEditor:
         res_npc.embeding = npcd.embeding
         res_npc.conf = npcd.conf
         res_npc.dir = npcd.dir
+        res_npc.label = npcd.label
         return res_npc
     def add_point_cloud(self,npcd_child,npcd_father):
         res_npc = Neural_pointcloud(self.opt)
@@ -82,4 +87,5 @@ class PointCloudEditor:
         res_npc.embeding = np.concatenate((npcd_child.embeding, npcd_father.embeding), axis=0)
         res_npc.conf = np.concatenate((npcd_child.conf, npcd_father.conf), axis=0)
         res_npc.dir = np.concatenate((npcd_child.dir, npcd_father.dir), axis=0)
+        res_npc.label = np.concatenate((npcd_child.label, npcd_father.label), axis=0)
         return res_npc

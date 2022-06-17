@@ -36,9 +36,10 @@ class CheckpointsController:
         self.points_conf= network_paras["neural_points.points_conf"].view(-1,1).cpu().numpy()
         self.points_dir = network_paras["neural_points.points_dir"].view(-1,3).cpu().numpy()
         self.points_color = network_paras["neural_points.points_color"].view(-1,3).cpu().numpy()
+        self.points_label = network_paras["neural_points.points_label"].view(-1, 1).cpu().numpy()
         print('point cloud scale:',self.points_color.shape,type(self.points_color))
         neural_pcd = Neural_pointcloud(self.opt)
-        neural_pcd.load_from_checkpoints(self.points_xyz,self.points_embeding,self.points_conf,self.points_dir,self.points_color)
+        neural_pcd.load_from_checkpoints(self.points_xyz,self.points_embeding,self.points_conf,self.points_dir,self.points_color,self.points_label)
         return neural_pcd
     def save_checkpoints_from_neuralpcd(self,neural_pcd,name):
         print('Saving checkpoints from neural point cloud...')
@@ -48,5 +49,6 @@ class CheckpointsController:
         network_paras["neural_points.points_conf"] =  torch.unsqueeze(torch.Tensor(neural_pcd.conf[...,np.newaxis]),dim=0)#[1,ptr,1]
         network_paras["neural_points.points_dir"] = torch.unsqueeze(torch.Tensor(neural_pcd.dir),dim=0)#[1,ptr,3]
         network_paras["neural_points.points_color"] = torch.unsqueeze(torch.Tensor(neural_pcd.color),dim=0) #[1,ptr,3]
+        network_paras["neural_points.points_label"] = torch.Tensor(neural_pcd.label[...,np.newaxis])  # [ptr,3]
         torch.save(network_paras,os.path.join(self.checkpoints_root,'edit',self.latest_iters+'_net_ray_marching_Edited_'+name+'.pth'))# find the latest pth file)
         print('Saving checkpoints done')

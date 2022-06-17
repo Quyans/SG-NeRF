@@ -3,13 +3,14 @@
 novel_cam_trajectory="1"
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='00-t'
+name='57-scene0113-strictSGS+sparseview+NOGrowingPrunesemanticpoint_edit'
 
 resume_iter=latest # 20000 #latest
 data_root="${nrDataRoot}/scannet/scans/"
 scan="scene0113_00" #_99
 normview=0
 edge_filter=10 # pixels crop out at image edge
+
 point_conf_mode="1" # 0 for only at features, 1 for multi at weight
 point_dir_mode="1" # 0 for only at features, 1 for color branch
 point_color_mode="1" # 0 for only at features, 1 for color branch
@@ -66,7 +67,7 @@ model='mvs_points_volumetric'
 near_plane=0.1
 far_plane=8.0
 which_ray_generation='near_far_linear' #'nerf_near_far_linear' #
-
+domain_size='1'
 dir_norm=0
 
 which_tonemap_func="off" #"gamma" #

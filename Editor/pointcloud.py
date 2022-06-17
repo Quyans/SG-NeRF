@@ -34,23 +34,26 @@ class Neural_pointcloud(Base_pointcloud):
         self.embeding = []
         self.conf = []
         self.dir = []
+        self.label = []
     '''
     checkpoints:从pth网络模型中读取
     ply:读取ply形式的点云信息，完备的
     meshlabfile:虽然也是ply形式的，但是失去了自定义的feature信息，需要人为的对其
     '''
-    def load_from_checkpoints(self,points_xyz,points_embeding,points_conf,points_dir,points_color):
+    def load_from_checkpoints(self,points_xyz,points_embeding,points_conf,points_dir,points_color,points_label):
         self.xyz = points_xyz
         self.embeding = points_embeding
         self.conf = points_conf
         self.dir = points_dir
         self.color = points_color
-    def load_from_var(self,points_xyz,points_embeding,points_conf,points_dir,points_color):
+        self.label = points_label
+    def load_from_var(self,points_xyz,points_embeding,points_conf,points_dir,points_color,points_label):
         self.xyz = points_xyz
         self.embeding = points_embeding
         self.conf = points_conf
         self.dir = points_dir
         self.color = points_color
+        self.label = points_label
     def load_from_ply(self,name='origin'):
         points_path = os.path.join(self.edit_dir,name+'_neuralpcd.ply')
         assert os.path.exists(points_path),'Load file doesn`t exist ,check!'
@@ -70,6 +73,7 @@ class Neural_pointcloud(Base_pointcloud):
             plydata.elements[0].data["dirz"].astype(np.float32))
         self.dir = np.concatenate([dirx[..., np.newaxis], diry[..., np.newaxis], dirz[..., np.newaxis]], axis=-1)
         self.conf = np.array(plydata.elements[0].data["conf"].astype(np.float32))
+        self.label = np.array(plydata.elements[0].data["label"].astype(np.int32))
         embedding = []
         for i in range(32):
             embedding.append(np.array(plydata.elements[0].data["embeding"+str(i)].astype(np.float32))[...,np.newaxis])
@@ -84,6 +88,7 @@ class Neural_pointcloud(Base_pointcloud):
         sv_embeding = self.embeding
         sv_conf = self.conf
         sv_dir = self.dir
+        sv_label = self.label
         # sv_dir = self.points_dir.cpu().numpy()
         for i in tqdm(range(sv_xyz.shape[0])):
             vertex.append((
@@ -129,6 +134,7 @@ class Neural_pointcloud(Base_pointcloud):
                 sv_embeding[i][29],
                 sv_embeding[i][30],
                 sv_embeding[i][31],
+                sv_label[i]
             ))
         #ply的格式，没写循环、增加可读性
         vertex = np.array(
@@ -176,6 +182,7 @@ class Neural_pointcloud(Base_pointcloud):
                 ("embeding29", np.dtype("float32")),
                 ("embeding30", np.dtype("float32")),
                 ("embeding31", np.dtype("float32")),
+                ("label",np.dtype("uint8"))
             ]
         )
         ply_pc = PlyElement.describe(vertex, "vertex")
@@ -219,6 +226,7 @@ class Meshlab_pointcloud(Base_pointcloud):
         neural_embeding = np.empty([pointsize,32])
         neural_conf = np.empty([pointsize])
         neural_dir = np.empty([pointsize,3])
+        neural_label = np.empty([pointsize])
         print('Scale of neural point cloud :',len(scene_neural_pcd))
         print('Scale of meshlab point cloud:',pointsize)
         idx = 0
@@ -231,9 +239,10 @@ class Meshlab_pointcloud(Base_pointcloud):
                 neural_embeding[idx] = scene_neural_pcd.embeding[i]
                 neural_conf[idx] = scene_neural_pcd.conf[i]
                 neural_dir[idx] = scene_neural_pcd.dir[i]
+                neural_label[idx] = scene_neural_pcd.label[i]
                 idx+=1
         print('\ncvt done...neural point cloud scale:',idx)
-        npc.load_from_var(neural_xyz,neural_embeding,neural_conf,neural_dir,neural_color)
+        npc.load_from_var(neural_xyz,neural_embeding,neural_conf,neural_dir,neural_color,neural_label)
         return npc
 
 

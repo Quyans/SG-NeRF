@@ -412,8 +412,30 @@ class lighting_fast_querier():
                     }
                 }
                 
-        
                 __global__ void get_shadingloc(
+                            const float *raypos,    // [B, 2048, 400, 3]
+                            const int *raypos_mask,    // B, R, D
+                            const int B,       // 3
+                            const int R,       // 3
+                            const int D,       // 3
+                            const int SR,       // 3
+                            float *sample_loc,       // B * R * SR * 3
+                            int *sample_loc_mask       // B * R * SR
+                        ) {
+                            int index = blockIdx.x * blockDim.x + threadIdx.x; // index of gpu thread
+                            int i_batch = index / (R * D);  // index of batch
+                            if (i_batch >= B) { return; }
+                            int temp = raypos_mask[index];
+                            if (temp >= 0) {
+                                int r = (index - i_batch * R * D) / D;
+                                int loc_inds = i_batch * R * SR + r * SR + temp;
+                                sample_loc[loc_inds * 3] = raypos[index * 3];
+                                sample_loc[loc_inds * 3 + 1] = raypos[index * 3 + 1];
+                                sample_loc[loc_inds * 3 + 2] = raypos[index * 3 + 2];
+                                sample_loc_mask[loc_inds] = 1;
+                            }
+                        }
+                __global__ void get_shadingloc_with_semantic(
                     const float *raypos,    // # [1, 784, 400, 3]要采样要query的点的世界坐标
                     const int *raylabel,//new![1,784,400,1]
                     const int *raypos_mask,    // #[1,784,400],沿光线这是第几个被采样的点-1 -1 0 1 -1 -1 1 2 3 4 5 -1 -1 -1 ...
@@ -632,14 +654,15 @@ class lighting_fast_querier():
         map_coor2occ = mod.get_function("map_coor2occ")
         fill_occ2pnts = mod.get_function("fill_occ2pnts")
         mask_raypos = mod.get_function("mask_raypos")
-        get_shadingloc = mod.get_function("get_shadingloc")
-        query_along_ray = mod.get_function("query_neigh_along_ray_layered") if self.opt.NN > 0 else mod.get_function("query_rand_along_ray")
         # TODO: need to implementation query_neigh_along_ray_layered_semantic_guidance with cuda
-        if self.opt.semantic_guidance == 1:
-
-            query_along_ray = mod.get_function("query_neigh_along_ray_layered_semantic_guidance")
         if self.opt.split=='test':
+            self.opt.semantic_guidance = 0
+        if self.opt.semantic_guidance == 1:
+            get_shadingloc = mod.get_function("get_shadingloc_with_semantic")
+            query_along_ray = mod.get_function("query_neigh_along_ray_layered_semantic_guidance")
+        else:
             query_along_ray = mod.get_function("query_neigh_along_ray_layered")
+            get_shadingloc = mod.get_function("get_shadingloc")
         return claim_occ, map_coor2occ, fill_occ2pnts, mask_raypos, get_shadingloc, query_along_ray
 
 
@@ -791,19 +814,32 @@ class lighting_fast_querier():
             sample_label_tensor = torch.zeros([B,R,SR],dtype=torch.int32,device=device)
 
             #确定好到底要sample哪些点，以comment为例，不可能每个像素sample400个点，而是由超参SR决定，SR=24，所以只取周围有点的24个query point 作为最终的query point
-            self.get_shadingloc(
-                Holder(raypos_tensor),  # [1, 784, 400, 3]要采样要query的点的世界坐标
-                Holder(raylabel_tensor),
-                Holder(raypos_mask_tensor),#[1,784,400],沿光线这是第几个被采样的点-1 -1 0 1 -1 -1 1 2 3 4 5 -1 -1 -1 ...
-                np.int32(B),# 1
-                np.int32(R),#784
-                np.int32(D),# 400
-                np.int32(SR),# 24SR，一条ray一次性最多采样的点数
-                Holder(sample_loc_tensor),#[1,784,24,3],init:all-0，存某个pixel需要采样的点的坐标
-                Holder(sample_label_tensor),
-                Holder(sample_loc_mask_tensor),#[1,784,24],init:all-0，存sample_loc_tensor的msk
-                block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1)
-            )
+            if self.opt.semantic_guidance==0:
+                self.get_shadingloc(
+                    Holder(raypos_tensor),  # [1, 2048, 400, 3]
+                    Holder(raypos_mask_tensor),
+                    np.int32(B),
+                    np.int32(R),
+                    np.int32(D),
+                    np.int32(SR),
+                    Holder(sample_loc_tensor),
+                    Holder(sample_loc_mask_tensor),
+                    block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1)
+                )
+            elif self.opt.semantic_guidance==1:
+                self.get_shadingloc(
+                    Holder(raypos_tensor),  # [1, 784, 400, 3]要采样要query的点的世界坐标
+                    Holder(raylabel_tensor),
+                    Holder(raypos_mask_tensor),#[1,784,400],沿光线这是第几个被采样的点-1 -1 0 1 -1 -1 1 2 3 4 5 -1 -1 -1 ...
+                    np.int32(B),# 1
+                    np.int32(R),#784
+                    np.int32(D),# 400
+                    np.int32(SR),# 24SR，一条ray一次性最多采样的点数
+                    Holder(sample_loc_tensor),#[1,784,24,3],init:all-0，存某个pixel需要采样的点的坐标
+                    Holder(sample_label_tensor),
+                    Holder(sample_loc_mask_tensor),#[1,784,24],init:all-0，存sample_loc_tensor的msk
+                    block=(kMaxThreadsPerBlock, 1, 1), grid=(gridSize, 1)
+                )
             # TODO: when testing ,this has a bug ,dont forget to fix it.
 
             # torch.cuda.synchronize()
