@@ -350,8 +350,9 @@ class NeuralPointsRayMarching(nn.Module):
             if weight is not None:
                 output["ray_max_shading_opacity"], opacity_ind = torch.max(output["coarse_point_opacity"], dim=-1, keepdim=True)
                 opacity_ind=opacity_ind[..., None] # 1, 1024, 1, 1
-                sampled_label = torch.mode(sampled_label,3)[0] #agg most label in neighbour
-                output["ray_max_sample_label"] = torch.gather(sampled_label, 2, opacity_ind.expand(-1, -1, -1,sampled_label.shape[-1])).squeeze(2)  # 1, 1024, 24, 3 -> 1, 1024, 1
+                #sampled_label = torch.mode(sampled_label,3)[0] #agg most label in neighbour
+                #output["ray_max_sample_label"] = torch.gather(sampled_label, 2, opacity_ind.expand(-1, -1, -1,sampled_label.shape[-1])).squeeze(2)  # 1, 1024, 24, 3 -> 1, 1024, 1
+
                 output["ray_max_sample_loc_w"] = torch.gather(sample_loc_w, 2, opacity_ind.expand(-1, -1, -1, sample_loc_w.shape[-1])).squeeze(2) # 1, 1024, 24, 3 -> 1, 1024, 3
                 weight = torch.gather(weight*conf_coefficient, 2, opacity_ind.expand(-1, -1, -1, weight.shape[-1])).squeeze(2)[..., None] # 1, 1024, 8
                 opacity_ind = opacity_ind[...,None]
@@ -367,6 +368,7 @@ class NeuralPointsRayMarching(nn.Module):
                 output["shading_avg_color"] = torch.sum(sampled_color * weight, dim=-2)  if sampled_color is not None else None
                 output["shading_avg_dir"] = torch.sum(sampled_dir * weight, dim=-2) if sampled_dir is not None else None
                 output["shading_avg_conf"] = torch.sum(sampled_conf * weight, dim=-2) if sampled_conf is not None else None
+                output["ray_max_sample_label"] = torch.zeros_like(output["shading_avg_conf"])   # I dont know whether is ok!
                 output["shading_avg_embedding"] = torch.sum(sampled_embedding * weight, dim=-2)
             else:
                 output.update({

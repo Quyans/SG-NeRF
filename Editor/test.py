@@ -24,7 +24,7 @@ class Options:
         parser = argparse.ArgumentParser(description="Argparse of  point_editor")
         parser.add_argument('--checkpoints_root',
                             type=str,
-                            default='/home/slam/devdata/NSEPN/checkpoints/scannet/57-scene0113-strictSGS+sparseview+NOGrowingPrunesemanticpoint_edit',#/home/slam/devdata/pointnerf/checkpoints/scannet/scene000-T
+                            default='/home/slam/devdata/NSEPN/checkpoints/scannet/61-scene0113-41+sparseview+NOgrowingPruneSemanticpointe+randomsampler(10W+10W)_finetune_edit',#/home/slam/devdata/pointnerf/checkpoints/scannet/scene000-T
                             help='root of checkpoints datasets')
         parser.add_argument('--gpu_ids',
                             type=str,

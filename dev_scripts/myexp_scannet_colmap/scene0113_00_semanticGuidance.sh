@@ -1,6 +1,6 @@
 #!/bin/bash
 
-semantic_guidance=1
+semantic_guidance=0
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
 name='58-scene0113-strictSGS_sparseview_notClockwiseangleNetwork'
@@ -118,7 +118,7 @@ resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
 save_iter_freq=5000
 save_point_freq=10000 #301840 #1
-maximum_step=200000 #500000 #250000 #800000
+maximum_step=400000 #500000 #250000 #800000
 
 niter=10000 #1000000
 niter_decay=10000 #250000
