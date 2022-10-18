@@ -8,6 +8,71 @@ from ..helpers.networks import init_seq, positional_encoding
 import matplotlib.pyplot as plt
 import torch.nn.utils.prune as prune_param
 
+
+# bepent
+from MinkowskiEngine import SparseTensor, CoordsManager
+import bpnet_dataset.augmentation_2d as t_2d
+from bpnet_dataset.voxelizer import Voxelizer
+from models.bpneter.bpnet import BPNet
+from asyncio.log import logger
+import random
+import imageio
+import math
+
+# create camera intrinsics
+def make_intrinsic(fx, fy, mx, my):
+    intrinsic = np.eye(4)
+    intrinsic[0][0] = fx
+    intrinsic[1][1] = fy
+    intrinsic[0][2] = mx
+    intrinsic[1][2] = my
+    return intrinsic
+# create camera intrinsics
+def adjust_intrinsic(intrinsic, intrinsic_image_dim, image_dim):
+    if intrinsic_image_dim == image_dim:
+        return intrinsic
+    resize_width = int(math.floor(image_dim[1] * float(intrinsic_image_dim[0]) / float(intrinsic_image_dim[1])))
+    intrinsic[0, 0] *= float(resize_width) / float(intrinsic_image_dim[0])
+    intrinsic[1, 1] *= float(image_dim[1]) / float(intrinsic_image_dim[1])
+    # account for cropping here
+    intrinsic[0, 2] *= float(image_dim[0] - 1) / float(intrinsic_image_dim[0] - 1)
+    intrinsic[1, 2] *= float(image_dim[1] - 1) / float(intrinsic_image_dim[1] - 1)
+    return intrinsic
+class LinkCreator(object):
+    def __init__(self, fx=577.870605, fy=577.870605, mx=319.5, my=239.5, image_dim=(320, 240), voxelSize=0.05):
+        self.intricsic = make_intrinsic(fx=fx, fy=fy, mx=mx, my=my)
+        self.intricsic = adjust_intrinsic(self.intricsic, intrinsic_image_dim=[640, 480], image_dim=image_dim)
+        self.imageDim = image_dim
+        self.voxel_size = voxelSize
+
+    def computeLinking(self, camera_to_world, coords, depth):
+        """
+        :param camera_to_world: 4 x 4
+        :param coords: N x 3 format
+        :param depth: H x W format
+        :return: linking, N x 3 format, (H,W,mask)
+        """
+        link = np.zeros((3, coords.shape[0]), dtype=np.int)
+        coordsNew = np.concatenate([coords, np.ones([coords.shape[0], 1])], axis=1).T
+        assert coordsNew.shape[0] == 4, "[!] Shape error"
+
+        world_to_camera = np.linalg.inv(camera_to_world)
+        p = np.matmul(world_to_camera, coordsNew)
+        p[0] = (p[0] * self.intricsic[0][0]) / p[2] + self.intricsic[0][2]
+        p[1] = (p[1] * self.intricsic[1][1]) / p[2] + self.intricsic[1][2]
+        pi = np.round(p).astype(np.int)
+        inside_mask = (pi[0] >= 0) * (pi[1] >= 0) \
+                      * (pi[0] < self.imageDim[0]) * (pi[1] < self.imageDim[1])
+        occlusion_mask = np.abs(depth[pi[1][inside_mask], pi[0][inside_mask]]
+                                - p[2][inside_mask]) <= self.voxel_size
+        inside_mask[inside_mask == True] = occlusion_mask
+        link[0][inside_mask] = pi[1][inside_mask]
+        link[1][inside_mask] = pi[0][inside_mask]
+        link[2][inside_mask] = 1
+
+        return link.T
+
+
 class NeuralPoints(nn.Module):
 
     @staticmethod
@@ -233,6 +298,27 @@ class NeuralPoints(nn.Module):
             default=(-100.0, -100.0, -100.0, 100.0, 100.0, 100.0),
             help='vscale is the block size that store several voxels'
         )
+        parser.add_argument('--predict_semantic',
+                            type=int,
+                            default=0,
+                            help='if 0:donot use BPNet to predict semantic;1 use BPNet to predict semantic label')
+        parser.add_argument('--layers_2d',
+                            type=int,
+                            default=34,
+                            help='BPNet 2dUnet layers')
+        parser.add_argument('--classes',
+                            type=int,
+                            default=20,
+                            help='BPNet predict types')
+        parser.add_argument('--arch_3d',
+                            type=str,
+                            default="MinkUNet18A",
+                            help='BPNet arch_3d')     
+        parser.add_argument('--bpnetweight',
+                            type=str,
+                            default="/home/vr717/Documents/qys/code/NSEPN/BPNet_qys/Data/ScanNet24102/initmodel/bpnet_5cm.pth.tar",
+                            help='bpnet pretrained model weight'
+        )               
 
     def __init__(self, num_channels, size, opt, device, checkpoint=None, feature_init_method='rand', reg_weight=0., feedforward=0):
         super().__init__()
@@ -241,7 +327,7 @@ class NeuralPoints(nn.Module):
 
         self.opt = opt
         self.grid_vox_sz = 0
-        self.points_conf, self.points_dir, self.points_color, self.eulers, self.Rw2c,self.points_label = None, None, None, None, None,None
+        self.points_conf, self.points_dir, self.points_color, self.eulers, self.Rw2c,self.points_label,self.points_feats = None, None, None, None, None,None,None
         self.device=device
         if self.opt.load_points ==1:#初始化时候没有，如果在pth里就有
             saved_features = None
@@ -250,6 +336,8 @@ class NeuralPoints(nn.Module):
 
             if saved_features is not None and "neural_points.xyz" in saved_features:#true
                 self.xyz = nn.Parameter(saved_features["neural_points.xyz"])
+                # self.points_feats = nn.Parameter(saved_features["neural_points.points_feats"])
+                # self.points_label = nn.Parameter(saved_features["neural_points.points_label"])
 
             else:
 
@@ -281,7 +369,16 @@ class NeuralPoints(nn.Module):
             # np.savetxt(filepath, self.xyz.reshape(-1, 3).detach().cpu().numpy(), delimiter=";")
 
             if checkpoint:#谁要学，nn.par谁，反正都存pth里面，这个实现方式还是不错的
-                self.points_label = nn.Parameter(saved_features["neural_points.points_label"], requires_grad=False)
+                # self.points_feats = nn.Parameter(saved_features["neural_points.points_feats"], requires_grad=False)
+                # self.points_label = nn.Parameter(saved_features["neural_points.points_label"], requires_grad=False)
+
+                try:
+                    self.points_feats = nn.Parameter(saved_features["neural_points.points_feats"], requires_grad=False)
+                    self.points_label = nn.Parameter(saved_features["neural_points.points_label"], requires_grad=False)
+                except:
+                    self.points_feats = None
+                    self.points_label = None
+
                 self.points_embeding = nn.Parameter(saved_features["neural_points.points_embeding"]) if "neural_points.points_embeding" in saved_features else None
                 print("self.points_embeding", self.points_embeding.shape)
                 # points_conf = saved_features["neural_points.points_conf"] if "neural_points.points_conf" in saved_features else None
@@ -337,6 +434,109 @@ class NeuralPoints(nn.Module):
         self.opt.query_size = self.opt.kernel_size if self.opt.query_size[0] == 0 else self.opt.query_size
         self.lighting_fast_querier = lighting_fast_querier_w if self.opt.wcoord_query > 0 else lighting_fast_querier_p
         self.querier = self.lighting_fast_querier(device, self.opt)
+
+        # 初始化bpnet
+        self.SCALE_AUGMENTATION_BOUND = (0.9, 1.1)
+        self.ROTATION_AUGMENTATION_BOUND = ((-np.pi / 64, np.pi / 64), (-np.pi / 64, np.pi / 64), (-np.pi,
+                                                                                            np.pi))
+        self.TRANSLATION_AUGMENTATION_RATIO_BOUND = ((-0.2, 0.2), (-0.2, 0.2), (0, 0))
+        self.ELASTIC_DISTORT_PARAMS = ((0.2, 0.4), (0.8, 1.6))
+
+        self.ROTATION_AXIS = 'z'
+        self.LOCFEAT_IDX = 2
+        
+        self.VIEW_NUM = 3
+        self.IMG_DIM = (320, 240)
+
+        aug = False
+        voxelSize = 0.05
+        self.aug = aug
+        self.IMG_DIM = (320, 240)
+        # if self.opt.predict_semantic:
+        #     self.opt.viewNum = 3
+        #     self.bpnetmodel = BPNet(self.opt) 
+        #     # if self.opt.bpnetweight:
+        #     #     logger.info("=> loading bpnet weight '{}'".format(self.opt.bpnetweight))
+        #     #     checkpoint = torch.load(self.opt.bpnetweight)
+        #     #     # model.load_state_dict(checkpoint['state_dict'])
+        #     #     state_dict = checkpoint['state_dict']
+        #     #     from collections import OrderedDict
+        #     #     new_state_dict = OrderedDict()
+        #     #     for k, v in state_dict.items():
+        #     #         name = k[7:] # remove `module.`
+        #     #         new_state_dict[name] = v
+        #     #     self.bpnetmodel.load_state_dict(new_state_dict, strict=True)
+        #     #     logger.info("=> loaded weight '{}'".format(self.opt.bpnetweight))
+
+        #     # self.bpnetmodel = self.bpnetmodel.cuda()
+        #     # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        #     # self.bpnetmodel = self.bpnetmodel.to(device)
+        #     self.voxelizer = Voxelizer(
+        #         voxel_size=voxelSize,
+        #         clip_bound=None,
+        #         use_augmentation=True,
+        #         scale_augmentation_bound=self.SCALE_AUGMENTATION_BOUND,
+        #         rotation_augmentation_bound=self.ROTATION_AUGMENTATION_BOUND,
+        #         translation_augmentation_ratio_bound=self.TRANSLATION_AUGMENTATION_RATIO_BOUND)
+        #     self.data2D_path = []
+       
+  
+        
+        # 2d图片到3D图片的lable对齐
+        self.remapper = np.ones(256) * 255
+        for i, x in enumerate([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 24, 28, 33, 34, 36, 39]):
+            self.remapper[x] = i
+        self.linkCreator = LinkCreator(image_dim=self.IMG_DIM, voxelSize=voxelSize)
+        
+         # 2D AUG
+        value_scale = 255
+        mean = [0.485, 0.456, 0.406]
+        mean = [item * value_scale for item in mean]
+        std = [0.229, 0.224, 0.225]
+        std = [item * value_scale for item in std]
+
+        # if self.opt.predict_semantic:
+        #     if self.aug:
+        #         self.transform_2d = t_2d.Compose([
+        #             t_2d.RandomGaussianBlur(),
+        #             t_2d.Crop([self.IMG_DIM[1] + 1, self.IMG_DIM[0] + 1], crop_type='rand', padding=mean,
+        #                     ignore_label=255),
+        #             t_2d.ToTensor(),
+        #             t_2d.Normalize(mean=mean, std=std)])
+        #     else:
+        #         self.transform_2d = t_2d.Compose([
+        #             t_2d.Crop([self.IMG_DIM[1] + 1, self.IMG_DIM[0] + 1], crop_type='rand', padding=mean,
+        #                     ignore_label=255),
+        #             t_2d.ToTensor(),
+        #             t_2d.Normalize(mean=mean, std=std)])
+        # else:
+        #     if self.aug:
+        #         self.transform_2d = t_2d.Compose([
+        #             t_2d.RandomGaussianBlur(),
+        #             t_2d.Crop([self.IMG_DIM[1] + 1, self.IMG_DIM[0] + 1], crop_type='rand', padding=mean,
+        #                     ignore_label=255),
+        #             t_2d.ToTensor(),
+        #             t_2d.Normalize(mean=mean, std=std)])
+        #     else:
+        #         self.transform_2d = t_2d.Compose([
+        #             t_2d.Crop([self.IMG_DIM[1] + 1, self.IMG_DIM[0] + 1], crop_type='rand', padding=mean,
+        #                     ignore_label=255),
+        #             t_2d.ToTensor(),
+        #             t_2d.Normalize(mean=mean, std=std)])
+        if self.aug:
+            self.transform_2d = t_2d.Compose([
+                t_2d.RandomGaussianBlur(),
+                t_2d.Crop([self.IMG_DIM[1] + 1, self.IMG_DIM[0] + 1], crop_type='rand', padding=mean,
+                        ignore_label=255),
+                t_2d.ToTensor(),
+                t_2d.Normalize(mean=mean, std=std)])
+        else:
+            self.transform_2d = t_2d.Compose([
+                t_2d.Crop([self.IMG_DIM[1] + 1, self.IMG_DIM[0] + 1], crop_type='rand', padding=mean,
+                        ignore_label=255),
+                t_2d.ToTensor(),
+                t_2d.Normalize(mean=mean, std=std)])
 
     def reset_querier(self):
         self.querier.clean_up()
@@ -409,7 +609,7 @@ class NeuralPoints(nn.Module):
             self.Rw2c = nn.Parameter(torch.cat([self.Rw2c, add_Rw2c[None,...]], dim=1))
             self.Rw2c.requires_grad = False
 
-    def set_points(self, points_xyz, points_label,points_embeding, points_color=None, points_dir=None, points_conf=None,points_semantic=None, parameter=False, Rw2c=None, eulers=None):
+    def set_points(self, points_xyz,points_feats,points_label,points_embeding, points_color=None, points_dir=None, points_conf=None,points_semantic=None, parameter=False, Rw2c=None, eulers=None):
         if points_embeding.shape[-1] > self.opt.point_features_dim:#No
             points_embeding = points_embeding[..., :self.opt.point_features_dim]
         if self.opt.default_conf > 0.0 and self.opt.default_conf <= 1.0 and points_conf is not None:#No
@@ -418,7 +618,13 @@ class NeuralPoints(nn.Module):
         if parameter:
             self.xyz = nn.Parameter(points_xyz)#不会对点云做grad
             self.xyz.requires_grad = self.opt.xyz_grad > 0
+            # Todo 这里应该是requires_grad = true
             self.points_label = nn.Parameter(points_label,requires_grad=False)
+            
+            self.points_feats = nn.Parameter(points_feats,requires_grad=False)
+            if points_feats is not None:
+                print("points feats")
+
             if points_conf is not None:
                 points_conf = nn.Parameter(points_conf)
                 points_conf.requires_grad = self.opt.conf_grad > 0#yes
@@ -593,6 +799,8 @@ class NeuralPoints(nn.Module):
         #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
         #vsize_np[0.008 0.008 0.008]
         #ranges_np[-1.6265 -1.9573 -3.2914 3.868 4.070 2.417]
+
+        # 这里需要改！！！！！
         sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor,sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = self.querier.query_points(pixel_idx_tensor,pixel_label_tensor, point_xyz_pers_tensor, self.xyz[None,...],self.points_label[None,...], actual_numpoints_tensor, h, w, intrinsic, near_plane, far_plane, ray_dirs_tensor,ray_label_tensor, cam_pos_tensor, cam_rot_tensor)
         # sample_pidx_tensor[1,784,24,8];sample_loc_tensor[1,784,24,3];sample_loc_w_tensor[1,784,24,3];sample_ray_dirs_tensor[1,784,24,3];ray_mask_tensor[1,784]
         #loc_w ? whats meaning
@@ -734,12 +942,104 @@ class NeuralPoints(nn.Module):
         input = self.pointuniform(torch.cat([input,input], dim=0), std)
         return input
 
+    def get_2d(self,train_id_paths, coords: np.ndarray):
+        """
+        :param      coords: Nx3
+        :return:    imgs:   CxHxWxV Tensor
+                    labels: HxWxV Tensor
+                    links: Nx4xV(1,H,W,mask) Tensor
+        """
+        # 默认为False
+        self.val_benchmark = False
+        frames_path = train_id_paths[0]
+        #frames_path 是這個場景的训练集所有图片 对于scannet241是100帧
+        # print(room_id)
+        partial = int(len(frames_path) / self.VIEW_NUM)
+        imgs, labels, links = [], [], []
+        for v in range(self.VIEW_NUM):
+            if not self.val_benchmark:
+                f = random.sample(frames_path[v * partial:v * partial + partial], k=1)[0][0]
+            else:
+                select_id = (v * partial+self.offset) % len(frames_path)
+                # select_id = (v * partial+partial//2)
+                f = frames_path[select_id]
+            # pdb.set_trace()
+            img = imageio.imread(f)
+            label = imageio.imread(f.replace('color', 'label').replace('jpg', 'png'))
+            
+            # label = self.remapper[label] # 这里可以不用搞因为这里的语义label都已经处理过了，如果没有处理过需要用到这里
+            
+            depth = imageio.imread(f.replace('color', 'depth').replace('jpg', 'png')) / 1000.0  # convert to meter
+            posePath = f.replace('color', 'pose').replace('.jpg', '.txt')
+            pose = np.asarray(
+                [[float(x[0]), float(x[1]), float(x[2]), float(x[3])] for x in
+                 (x.split(" ") for x in open(posePath).read().splitlines())]
+            )
+            # pdb.set_trace()
+            link = np.ones([coords.shape[0], 4], dtype=np.int)
+            link[:, 1:4] = self.linkCreator.computeLinking(pose, coords, depth)
+            temimg = img
+            temlabel =label
+            img = self.transform_2d(img)
+            imgs.append(img)
+            # labels.append(label)
+            links.append(link)
 
+        imgs = torch.stack(imgs, dim=-1)
+        # labels = torch.stack(labels, dim=-1)
+        links = np.stack(links, axis=-1)
+        links = torch.from_numpy(links)
+        return imgs, links
 
-
+   
     def forward(self, inputs):
 
-        pixel_idx, camrotc2w, campos, near_plane, far_plane, h, w, intrinsic,pixel_label = inputs["pixel_idx"].to(torch.int32), inputs["camrotc2w"], inputs["campos"], inputs["near"], inputs["far"], inputs["h"], inputs["w"], inputs["intrinsic"],inputs["pixel_label"]
+        pixel_idx, camrotc2w, campos, near_plane, far_plane, h, w, intrinsic,pixel_label,train_id_paths,test_id_paths = inputs["pixel_idx"].to(torch.int32), inputs["camrotc2w"], inputs["campos"], inputs["near"], inputs["far"], inputs["h"], inputs["w"], inputs["intrinsic"],inputs["pixel_label"],inputs["train_id_paths"],inputs["test_id_paths"]
+        
+        # print("fuck!!!forward")
+        
+        # Bpnet部分
+        # locs_in = self.xyz.data.cpu().numpy().copy()
+        # feats_in = self.points_feats.data.cpu().numpy().copy()
+        # labels_in = self.points_label.data.cpu().numpy().copy()
+        # # import copy
+        # # locs_in = copy.deepcopy(self.xyz.data.cpu().numpy())
+        # # feats_in = copy.deepcopy(self.points_feats.data.cpu().numpy())
+        # # labels_in = copy.deepcopy(self.points_label.data.cpu().numpy())
+
+        # # colors, labels_2d, links = self.get_2d(train_id_paths, locs_in)
+        # colors, links = self.get_2d(train_id_paths, locs_in)
+        
+        # locs = self.prevoxel_transforms(locs_in) if self.aug else locs_in
+        # locs, feats, labels_3d, inds_reconstruct, links = self.voxelizer.voxelize(locs, feats_in,labels_in, link=links)
+        # coords = torch.from_numpy(locs).int()
+        # coords = torch.cat((torch.ones(coords.shape[0], 1, dtype=torch.int), coords), dim=1)
+        # # feats = torch.from_numpy(feats).float() / 127.5 - 1.
+        # feats = torch.from_numpy(feats).float()
+        # labels_3d = labels_in
+        # labels_3d = torch.from_numpy(labels_3d).long()
+        
+        # inds_reconstruct = torch.from_numpy(inds_reconstruct).long()
+        
+        # colors = torch.stack([colors])
+        # # labels_2d = torch.stack([labels_2d])
+        
+        # # 在这里需要对数据的进行一步预处理 对应scanNetCross.py 239行
+        # coords[:,0] *= 0
+        # links[:,0,:]*=0
+        
+        # sinput = SparseTensor(feats.cuda(non_blocking=True), coords.cuda(non_blocking=True))
+        # # sinput = SparseTensor(feats,coords)
+        # colors, links = colors.cuda(non_blocking=True), links.cuda(non_blocking=True)
+        # # labels_3d, labels_2d = labels_3d.cuda(non_blocking=True), labels_2d.cuda(non_blocking=True)
+
+        # output_3d, output_2d =  self.bpnetmodel(sinput, colors, links)
+        # output_3d = output_3d[inds_reconstruct, :]
+         # Bpnet部分
+        
+        
+
+        
         # 1, 294, 24, 32;   1, 294, 24;     1, 291, 2
         # sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
         # sample_loc_tensor[1,784,24,3]存某个pixel需要query的点的坐标，换坐标系了，应该从世界坐标系转到了pers（相机坐标系？）

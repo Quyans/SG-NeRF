@@ -313,7 +313,7 @@ class ScannetFtDataset(BaseDataset):
                 self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
                 self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
             else:  # nsvf configuration
-                step=5#5
+                step=100#5
                 self.train_id_list = self.all_id_list[::step]
                 self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
         else:
@@ -328,6 +328,9 @@ class ScannetFtDataset(BaseDataset):
         print("test_id_list",len(self.test_id_list), self.test_id_list)
         print("train_id_list",len(self.train_id_list))
         #self.train_id_list = self.remove_blurry(self.train_id_list)
+        self.train_id_paths = [ [os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(i)) for i in self.train_id_list]]
+        self.test_id_paths = [ [os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(i)) for i in self.test_id_list]]
+
         self.id_list = self.train_id_list if self.split=="train" else self.test_id_list
         self.view_id_list=[]
 
@@ -424,19 +427,29 @@ class ScannetFtDataset(BaseDataset):
             if not os.path.exists(points_path):
                 self.parse_mesh()
         plydata = PlyData.read(points_path)
+        device = torch.device('cuda:0')
+
         # points_semantic_path = os.path.join(self.data_dir,self.scan,"exported/")
         # plydata (PlyProperty('x', 'double'), PlyProperty('y', 'double'), PlyProperty('z', 'double'), PlyProperty('nx', 'double'), PlyProperty('ny', 'double'), PlyProperty('nz', 'double'), PlyProperty('red', 'uchar'), PlyProperty('green', 'uchar'), PlyProperty('blue', 'uchar'))
-        x,y,z=torch.as_tensor(plydata.elements[0].data["x"].astype(np.float32), device="cuda", dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["y"].astype(np.float32), device="cuda", dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["z"].astype(np.float32), device="cuda", dtype=torch.float32)
+        x,y,z=torch.as_tensor(plydata.elements[0].data["x"].astype(np.float32), device=device, dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["y"].astype(np.float32), device=device, dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["z"].astype(np.float32), device=device, dtype=torch.float32)
         points_xyz = torch.stack([x,y,z], dim=-1)
-        points_label = torch.as_tensor(plydata.elements[0].data["label"].astype(np.uint8)[...,None], device="cuda", dtype=torch.uint8)
+        points_label = torch.as_tensor(plydata.elements[0].data["label"].astype(np.uint8)[...,None], device=device, dtype=torch.uint8)
+        checkpoints_path =  os.path.join(self.data_dir, self.scan, "exported/points.pth")
+        pth_data = torch.load(checkpoints_path)
+
+        points_feats = (pth_data[1] + 1.) * 127.5
+        points_feats = torch.as_tensor(points_feats.astype(np.float32),device=device)
+        points_loc = torch.as_tensor(pth_data[0].astype(np.float32),device=device)
         if self.opt.ranges[0] > -99.0:
             ranges = torch.as_tensor(self.opt.ranges, device=points_xyz.device, dtype=torch.float32)
             mask = torch.prod(torch.logical_and(points_xyz >= ranges[None, :3], points_xyz <= ranges[None, 3:]), dim=-1) > 0
             points_xyz = points_xyz[mask]
             points_label = points_label[mask]
+            points_feats = points_feats[mask]
+            points_loc = points_loc[mask]
         # np.savetxt(os.path.join(self.data_dir, self.scan, "exported/pcd.txt"), points_xyz.cpu().numpy(), delimiter=";")
 
-        return points_xyz , points_label
+        return points_xyz,points_feats, points_label
 
     def read_depth(self, filepath):
         depth_im = cv2.imread(filepath, -1).astype(np.float32)
@@ -680,6 +693,9 @@ class ScannetFtDataset(BaseDataset):
             else:
                 item['bg_color'] = torch.FloatTensor(self.bg_color)
 
+        # 返回训练集
+        item['train_id_paths'] = self.train_id_paths
+        item['test_id_paths'] = self.test_id_paths
         return item
 
 
@@ -688,6 +704,8 @@ class ScannetFtDataset(BaseDataset):
         item = self.__getitem__(idx, crop=crop, full_img=full_img)
 
         for key, value in item.items():
+            if key=="train_id_paths" or key=="test_id_paths":
+                continue
             if not isinstance(value, str):
                 if not torch.is_tensor(value):
                     value = torch.as_tensor(value)

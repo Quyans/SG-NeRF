@@ -471,7 +471,7 @@ def probe_hole(model, dataset, visualizer, opt, bg_info, test_steps=0, opacity_t
             raydir = data['raydir'].clone()
             pixel_idx = data['pixel_idx'].view(data['pixel_idx'].shape[0], -1, data['pixel_idx'].shape[3]).clone()
             pixel_label = data['pixel_label'].view(data['pixel_label'].shape[0], -1,data['pixel_label'].shape[3]).clone()
-            edge_mask = torch.zeros([height, width], dtype=torch.bool, device='cuda')
+            edge_mask = torch.zeros([height, width], dtype=torch.bool, device='cuda:0')
             edge_mask[pixel_idx[0, ..., 1].to(torch.long), pixel_idx[0, ..., 0].to(torch.long)] = 1
             edge_mask = edge_mask.reshape(-1) > 0
             totalpixel = pixel_idx.shape[1]
@@ -658,8 +658,9 @@ def main():
             model = create_model(opt)
             model.setup(opt)
             model.eval()
+            print("fuck!!!")
             if load_points in [1,3]:#True,load point = 1
-                points_xyz_all,points_label_all = train_dataset.load_init_points()
+                points_xyz_all,points_feats_all,points_label_all = train_dataset.load_init_points()
             if load_points == 2:#False
                 points_xyz_all = train_dataset.load_init_depth_points(device="cuda", vox_res=100)
             if load_points == 3:#False
@@ -690,25 +691,35 @@ def main():
                     torch.logical_and(points_xyz_all[..., :3] >= ranges[None, :3], points_xyz_all[..., :3] <= ranges[None, 3:]),
                     dim=-1) > 0
                 points_xyz_all = points_xyz_all[mask]
+                points_feats_all = points_feats_all[mask]
                 points_label_all = points_label_all[mask]
 
             if opt.vox_res > 0:
                 points_xyz_all = [points_xyz_all] if not isinstance(points_xyz_all, list) else points_xyz_all
+                points_feats_all = [points_feats_all] if not isinstance(points_feats_all, list) else points_feats_all
                 points_label_all = [points_label_all] if not isinstance(points_label_all, list) else points_label_all
                 points_xyz_holder = torch.zeros([0,3], dtype=points_xyz_all[0].dtype, device="cuda")
+                points_feats_holder = torch.zeros([0,3], dtype=points_feats_all[0].dtype, device="cuda")
                 points_label_holder = torch.zeros([0,1], dtype=points_label_all[0].dtype, device="cuda")
                 for i in range(len(points_xyz_all)):#一次遍历的是一张图片里
                     points_xyz = points_xyz_all[i]
+                    points_feats = points_feats_all[i]
                     points_label = points_label_all[i]
+
                     vox_res = opt.vox_res // (1.5**i)
                     print("load points_xyz", points_xyz.shape)
                     _, sparse_grid_idx, sampled_pnt_idx = mvs_utils.construct_vox_points_closest(points_xyz.cuda() if len(points_xyz) < 80000000 else points_xyz[::(len(points_xyz) // 80000000 + 1), ...].cuda(), vox_res)
                     points_xyz = points_xyz[sampled_pnt_idx, :]
+
+                    points_feats = points_feats[sampled_pnt_idx,:]
                     points_label = points_label[sampled_pnt_idx, :]
                     print("after voxelize:", points_xyz.shape)
+
                     points_xyz_holder = torch.cat([points_xyz_holder, points_xyz], dim=0)
+                    points_feats_holder = torch.cat([points_feats_holder,points_feats], dim=0)
                     points_label_holder = torch.cat([points_label_holder,points_label], dim=0)
                 points_xyz_all = points_xyz_holder
+                points_feats_all = points_feats_holder
                 points_label_all = points_label_holder
 
             # if opt.resample_pnts > 0:#False
@@ -724,6 +735,7 @@ def main():
             unique_cam_ind = torch.unique(cam_ind)
             print("unique_cam_ind", unique_cam_ind.shape)
             points_xyz_all = [points_xyz_all[cam_ind[:,0]==unique_cam_ind[i], :] for i in range(len(unique_cam_ind))]#按照camera list 分开points_xyz_all
+            points_feats_all = [points_feats_all[cam_ind[:,0]==unique_cam_ind[i], :] for i in range(len(unique_cam_ind))]
             points_label_all = [points_label_all[cam_ind[:,0]==unique_cam_ind[i], :] for i in range(len(unique_cam_ind))]
             featuredim = opt.point_features_dim
             points_embedding_all = torch.zeros([1, 0, featuredim], device=unique_cam_ind.device, dtype=torch.float32)
@@ -750,8 +762,10 @@ def main():
                 points_conf_all = torch.cat([points_conf_all, conf], dim=1)
                 # visualizer.save_neural_points(id, cam_xyz_all, color, batch, save_ref=True)
             points_xyz_all=torch.cat(points_xyz_all, dim=0)
+            points_feats_all = torch.cat(points_feats_all,dim=0)
             points_label_all = torch.cat(points_label_all,dim=0)
-            visualizer.save_neural_points("init", points_xyz_all, points_label_all, None, save_ref=load_points == 0)
+            # visualizer.save_neural_points("init", points_xyz_all, points_label_all, None, save_ref=load_points == 0)
+            visualizer.save_neural_points("init", points_xyz_all, points_feats_all, None, save_ref=load_points == 0)
             # print("vis")
             # visualizer.save_neural_points("cam", campos, None, None, None)
             # print("vis")
@@ -762,6 +776,7 @@ def main():
             opt.mode = 2
             model = create_model(opt)
         # None in default train scannet
+        # print("points_xyz_all size",points_xyz_all.shape)
         if points_xyz_all is not None:
             if opt.bgmodel.startswith("planepoints"):# bgmodel='no'
                 gen_pnts, gen_embedding, gen_dir, gen_color, gen_conf = train_dataset.get_plane_param_points()
@@ -772,7 +787,7 @@ def main():
                 points_color_all = torch.cat([points_color_all, gen_dir], dim=1)
                 points_dir_all = torch.cat([points_dir_all, gen_color], dim=1)
                 points_conf_all = torch.cat([points_conf_all, gen_conf], dim=1)
-            model.set_points(points_xyz = points_xyz_all.cuda(),points_label = points_label_all.cuda(), points_embedding = points_embedding_all.cuda(), points_color=points_color_all.cuda(),
+            model.set_points(points_xyz = points_xyz_all.cuda(),points_feats = points_feats_all.cuda(), points_label = points_label_all.cuda(), points_embedding = points_embedding_all.cuda(), points_color=points_color_all.cuda(),
                              points_dir=points_dir_all.cuda(), points_conf=points_conf_all.cuda(),
                              Rw2c=normRw2c.cuda() if opt.load_points < 1 and opt.normview != 3 else None)
             epoch_count = 1
@@ -952,6 +967,10 @@ def main():
                     xyz_world_sect_plane = mvs_utils.gen_bg_points(model.input)
                     bg_ray, fg_masks = model.set_bg(xyz_world_sect_plane, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, fg_masks=fg_masks)
                 data["bg_ray"] = bg_ray
+
+
+            # torch.cuda.set_device(0)
+            # model.net_ray_marching.cuda()
             model.optimize_parameters(total_steps=total_steps) #
             losses = model.get_current_losses()#{'total': tensor(0.0206, device='cuda:0', grad_fn=<AddBackward0>), 'ray_masked_coarse_raycolor': tensor(0.0213, device='cuda:0', grad_fn=<MseLossBackward>), 'ray_miss_coarse_raycolor': tensor(0., device='cuda:0'), 'coarse_raycolor': tensor(0.0213, device='cuda:0', grad_fn=<MseLossBackward>), 'conf_coefficient': tensor(-6.9088, device='cuda:0', grad_fn=<MeanBackward0>)}
             visualizer.accumulate_losses(losses)
@@ -1089,5 +1108,27 @@ def create_comb_dataset(test_opt, opt, total_steps, prob=None, test_num_step=1):
     test_dataset = create_dataset(test_opt)
     return test_dataset
 
+import torch.backends.cudnn as cudnn
+from MinkowskiEngine import SparseTensor, CoordsManager
 if __name__ == '__main__':
+    # import pydevd_pycharm
+    # pydevd_pycharm.settrace('localhost', port=10086, stdoutToServer=True, stderrToServer=True)
+
+    # torch.backends.cudnn.enable =False
+    # torch.backends.cudnn.benchmark = False
+    # # cudnn.benchmark = False
+
+    # # temfeat = torch.rand(50,3)
+    # # temcoord = torch.rand(50,4)
+    # # testinput = SparseTensor(temfeat.cuda(non_blocking=True), temcoord.cuda(non_blocking=True))
+    # os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+    
+    # os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+    cudnn.benchmark = True
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.enabled = False
+    # torch.cuda.set_device(0)
+    
+
+
     main()

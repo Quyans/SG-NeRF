@@ -115,7 +115,12 @@ class Visualizer:
                 # xyz = xyz.detach().cpu().numpy()
                 points = points.detach().cpu().numpy()
             save_points(points, self.point_dir, total_steps)
-
+        elif features.shape[-1] == 3:#Bpnet feature
+            points = torch.cat([xyz, (features*127.5+127.5)], dim=-1)
+            if torch.is_tensor(points):
+                # xyz = xyz.detach().cpu().numpy()
+                points = points.detach().cpu().numpy()
+            save_points(points, self.point_dir, total_steps)
         else:
             points = torch.cat([xyz, features[0, ..., :3] * 255], dim=-1)
             if torch.is_tensor(points):

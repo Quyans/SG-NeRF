@@ -163,9 +163,11 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
 
         # parallel
         if self.opt.gpu_ids:
-            self.net_ray_marching.to(self.device)
-            self.net_ray_marching = torch.nn.DataParallel(
-                self.net_ray_marching, self.opt.gpu_ids)
+            if len(self.opt.gpu_ids) == 1:
+                self.net_ray_marching.to(self.opt.gpu_ids[0])
+            else:
+                self.net_ray_marching = torch.nn.DataParallel(
+                    self.net_ray_marching, self.opt.gpu_ids)
 
 
     def check_getAggregator(self, opt, **kwargs):
@@ -262,6 +264,8 @@ class NeuralPointsRayMarching(nn.Module):
                 w=None,
                 intrinsic=None,
                 pixel_label=None,
+                train_id_paths=None,
+                test_id_paths=None,
                 **kargs):
         output = {}
         # B, channel, 292, 24, 32 ;      B, 3, 294, 24, 32;     B, 294, 24;     B, 291, 2
@@ -279,7 +283,7 @@ class NeuralPointsRayMarching(nn.Module):
         # ray_mask_tensor[1,784];
         # vsize=[0.0008,0.0008,0.0008]；
         # grid_vox_sz = 0
-        sampled_color, sampled_label,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w,sample_ray_dirs, ray_mask_tensor, vsize, grid_vox_sz = self.neural_points({"pixel_idx": pixel_idx, "camrotc2w": camrotc2w, "campos": campos, "near": near, "far": far,"focal": focal, "h": h, "w": w, "intrinsic": intrinsic,"gt_image":gt_image, "raydir":raydir,"pixel_label":pixel_label})
+        sampled_color, sampled_label,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w,sample_ray_dirs, ray_mask_tensor, vsize, grid_vox_sz = self.neural_points({"pixel_idx": pixel_idx, "camrotc2w": camrotc2w, "campos": campos, "near": near, "far": far,"focal": focal, "h": h, "w": w, "intrinsic": intrinsic,"gt_image":gt_image, "raydir":raydir,"pixel_label":pixel_label,"train_id_paths":train_id_paths,"test_id_paths":test_id_paths})
         #decoded_features[1,784,24,4]->(color+alpha)
         #ray_valid[1,784,24]
         #weight[1,784,24,8]

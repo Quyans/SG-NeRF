@@ -168,9 +168,9 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
         self.top_ray_miss_loss = torch.zeros([self.num_probe + 1], dtype=torch.float32, device=self.device)
         self.top_ray_miss_ids = torch.arange(self.num_probe + 1, dtype=torch.int32, device=self.device)
 
-    def set_points(self, points_xyz, points_label, points_embedding, points_color=None, points_dir=None, points_conf=None, points_semantic=None,Rw2c=None, eulers=None, editing=False):
+    def set_points(self, points_xyz,points_feats, points_label, points_embedding, points_color=None, points_dir=None, points_conf=None, points_semantic=None,Rw2c=None, eulers=None, editing=False):
         if not editing:#True
-            self.neural_points.set_points(points_xyz, points_label,points_embedding, points_color=points_color, points_dir=points_dir, points_conf=points_conf, points_semantic= points_semantic,parameter=self.opt.feedforward == 0, Rw2c=Rw2c, eulers=eulers)
+            self.neural_points.set_points(points_xyz,points_feats,points_label,points_embedding , points_color=points_color, points_dir=points_dir, points_conf=points_conf, points_semantic= points_semantic,parameter=self.opt.feedforward == 0, Rw2c=Rw2c, eulers=eulers)
         else:
             self.neural_points.editing_set_points(points_xyz, points_embedding, points_color=points_color, points_dir=points_dir, points_conf=points_conf, parameter=self.opt.feedforward == 0, Rw2c=Rw2c, eulers=eulers)
         if self.opt.feedforward == 0 and self.opt.is_train:

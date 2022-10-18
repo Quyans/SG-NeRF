@@ -6,6 +6,7 @@ import pycuda
 from pycuda.compiler import SourceModule
 import pycuda.driver as drv
 import pycuda.gpuarray as gpuarray
+import pycuda.autoinit
 import matplotlib.pyplot as plt
 import torch
 import pickle
@@ -13,8 +14,8 @@ import time
 from models.rendering.diff_ray_marching import near_far_linear_ray_generation, near_far_disparity_linear_ray_generation
 
 from data.load_blender import load_blender_data
-
-# X = torch.cuda.FloatTensor(8)
+from contextlib import ContextDecorator
+X = torch.cuda.FloatTensor(8)
 
 
 class Holder(pycuda.driver.PointerHolderBase):
@@ -26,6 +27,23 @@ class Holder(pycuda.driver.PointerHolderBase):
     def get_pointer(self):
         return self.t.data_ptr()
 
+class with_pycuda(ContextDecorator):
+    def __init__(self, device, enabled=True):
+        self.device = device
+        self.ctx = None
+        self.enabled = enabled
+
+    def __enter__(self):
+        dev = drv.Device(self.device)
+        if self.enabled:
+            self.ctx = dev.make_context()
+        return drv
+
+    def __exit__(self, *exc_type):
+        if self.ctx is not None:
+            self.ctx.pop()
+        return False
+
 class lighting_fast_querier():
 
     def __init__(self, device, opt):
@@ -35,13 +53,15 @@ class lighting_fast_querier():
         self.opt = opt
         drv.init()
         # self.device = drv.Device(gpu)
-        self.ctx = drv.Device(self.gpu).make_context()
-        self.claim_occ, self.map_coor2occ, self.fill_occ2pnts, self.mask_raypos, self.get_shadingloc, self.query_along_ray = self.build_cuda()
+        # self.ctx = drv.Device(self.gpu).make_context()
+        with with_pycuda(self.gpu, enabled=False):
+            self.claim_occ, self.map_coor2occ, self.fill_occ2pnts, self.mask_raypos, self.get_shadingloc, self.query_along_ray = self.build_cuda()
         self.inverse = self.opt.inverse
         self.count=0
 
     def clean_up(self):
-        self.ctx.pop()
+        return
+        # self.ctx.pop()
 
     def get_hyperparameters(self, vsize_np, point_xyz_w_tensor, ranges=None):
         '''
@@ -72,6 +92,7 @@ class lighting_fast_querier():
         return np.asarray(radius_limit_np).astype(np.float32), np.asarray(depth_limit_np).astype(np.float32), ranges_np, vsize_np, vdim_np, scaled_vsize_np, scaled_vdim_np, vscale_np, ranges_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, kernel_size_gpu, query_size_gpu
 
     # add pixel_label_tensor
+    @with_pycuda(0, enabled=False)
     def query_points(self, pixel_idx_tensor,pixel_label_tensor, point_xyz_pers_tensor, point_xyz_w_tensor,points_label_tensor, actual_numpoints_tensor, h, w, intrinsic, near_depth, far_depth, ray_dirs_tensor,ray_label_tensor ,cam_pos_tensor, cam_rot_tensor):
         near_depth, far_depth = np.asarray(near_depth).item() , np.asarray(far_depth).item()#0.1，8
         radius_limit_np, depth_limit_np, ranges_np, vsize_np, vdim_np, scaled_vsize_np, scaled_vdim_np, vscale_np, range_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, kernel_size_gpu, query_size_gpu = self.get_hyperparameters(self.opt.vsize, point_xyz_w_tensor, ranges=self.opt.ranges)
@@ -105,7 +126,6 @@ class lighting_fast_querier():
         x_pers = xyz_c[..., 0] / xyz_c[..., 2]
         y_pers = xyz_c[..., 1] / xyz_c[..., 2]
         return torch.stack([x_pers, y_pers, z_pers], dim=-1)
-
 
     def build_cuda(self):
 
