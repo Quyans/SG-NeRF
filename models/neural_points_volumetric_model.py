@@ -3,6 +3,19 @@ from .neural_points.neural_points import NeuralPoints
 from .aggregators.point_aggregators import PointAggregator
 import os
 
+from asyncio.log import logger
+
+# bpnet部分
+from models.bpneter.bpnet import BPNet
+from MinkowskiEngine import SparseTensor, CoordsManager
+import bpnet_dataset.augmentation_2d as t_2d
+from bpnet_dataset.voxelizer import Voxelizer
+from models.bpneter.bpnet import BPNet
+from asyncio.log import logger
+import random
+import imageio
+import math
+
 
 class NeuralPointsVolumetricModel(BaseRenderingModel):
 
@@ -134,6 +147,7 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
         param = {}
         # additional parameters
 
+        self.bpnet = self.check_getBpnet(opt)
         self.aggregator = self.check_getAggregator(opt)
         self.is_compute_depth = opt.compute_depth or not not opt.depth_loss_items
         checkpoint_path = os.path.join(opt.checkpoints_dir, opt.name, '{}_net_ray_marching.pth'.format(opt.resume_iter))
@@ -144,7 +158,7 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
             self.neural_points = None
 
         add_property2dict(param, self, [
-            'aggregator', 'is_compute_depth', "neural_points", "opt"
+            'aggregator', 'is_compute_depth', "neural_points", "opt","bpnet"
         ])
         add_property2dict(param, opt, [
             'num_pos_freqs', 'num_viewdir_freqs'
@@ -162,18 +176,52 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
         self.model_names = ['ray_marching'] if getattr(self, "model_names", None) is None else self.model_names + ['ray_marching']
 
         # parallel
+        # if self.opt.gpu_ids:
+        #     if len(self.opt.gpu_ids) == 1:
+        #         self.net_ray_marching.to(self.opt.gpu_ids[0])
+        #     else:
+        #         self.net_ray_marching = torch.nn.DataParallel(
+        #             self.net_ray_marching, self.opt.gpu_ids)
         if self.opt.gpu_ids:
-            if len(self.opt.gpu_ids) == 1:
-                self.net_ray_marching.to(self.opt.gpu_ids[0])
-            else:
-                self.net_ray_marching = torch.nn.DataParallel(
-                    self.net_ray_marching, self.opt.gpu_ids)
+            self.net_ray_marching.to(self.device)
+            self.net_ray_marching = torch.nn.DataParallel(
+                self.net_ray_marching, self.opt.gpu_ids)
 
 
     def check_getAggregator(self, opt, **kwargs):
         aggregator = PointAggregator(opt)
         return aggregator
 
+    def check_getBpnet(self,opt,**kwargs):
+        bpnet = None
+
+        # 初始化bpnet
+        if self.opt.predict_semantic:
+            aug = False
+            
+            opt.viewNum = 3
+            opt.aug = aug
+
+            print(self.opt == opt)
+            bpnet = BPNet(opt)
+            if opt.bpnetweight:
+                logger.info("=> loading bpnet weight '{}'".format(opt.bpnetweight))
+                checkpoint = torch.load(opt.bpnetweight)
+                # model.load_state_dict(checkpoint['state_dict'])
+                state_dict = checkpoint['state_dict']
+                from collections import OrderedDict
+                new_state_dict = OrderedDict()
+                for k, v in state_dict.items():
+                    name = k[7:] # remove `module.`
+                    new_state_dict[name] = v
+                bpnet.load_state_dict(new_state_dict, strict=True)
+                logger.info("=> loaded weight '{}'".format(opt.bpnetweight))
+
+            # self.bpnetmodel = self.bpnetmodel.cuda()
+            # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+            # self.bpnetmodel = self.bpnetmodel.to(device)
+        return bpnet
 
     def setup_optimizer(self, opt):
         '''
@@ -226,6 +274,7 @@ class NeuralPointsRayMarching(nn.Module):
              render_func=None,
              blend_func=None,
              aggregator=None,
+             bpnet=None,
              is_compute_depth=False,
              neural_points=None,
              opt=None,
@@ -235,7 +284,7 @@ class NeuralPointsRayMarching(nn.Module):
         super(NeuralPointsRayMarching, self).__init__()
 
         self.aggregator = aggregator
-
+        self.bpnet = bpnet
         self.num_pos_freqs = num_pos_freqs
         self.num_viewdir_freqs = num_viewdir_freqs
         # ray generation
@@ -268,6 +317,12 @@ class NeuralPointsRayMarching(nn.Module):
                 test_id_paths=None,
                 **kargs):
         output = {}
+
+        # 提前做bpnet的方法
+        locs_in,feats_in,labels_in = self.neural_points.getPointsData()
+        # def train(self,locs_in,feats_in,labels_in,train_id_paths):
+        bpnet_points_label,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in,labels_in,train_id_paths)
+
         # B, channel, 292, 24, 32 ;      B, 3, 294, 24, 32;     B, 294, 24;     B, 291, 2
         # sampled_color[1,784,24,8,3]原始点云input的颜色;
         # sampled_Rw2c[3,3]-ones(3);

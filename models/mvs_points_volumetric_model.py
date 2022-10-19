@@ -50,7 +50,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
             This assumes network modules have been added to self.model_names
             By default, it uses an adam optimizer for all parameters.
         '''
-
+        bpnet_params = []
         net_params = []
         neural_params = []
         mvs_params = []
@@ -63,10 +63,10 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
                 mvs_params = mvs_params + [par[1] for par in param_lst]
             else:
                 param_lst = list(net.named_parameters())
-
-                net_params = net_params + [par[1] for par in param_lst if not par[0].startswith("module.neural_points")]
+                bpnet_params = bpnet_params +  [par[1] for par in param_lst if par[0].startswith("module.bpnet")]
+                net_params = net_params + [par[1] for par in param_lst if (not par[0].startswith("module.neural_points") and not par[0].startswith("module.bpnet"))]
                 neural_params = neural_params + [par[1] for par in param_lst if par[0].startswith("module.neural_points")]
-
+        self.bpnet_params = bpnet_params
         self.net_params = net_params
         self.neural_params = neural_params
         self.mvs_params = mvs_params
@@ -77,6 +77,14 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
                                               lr=mvs_lr,
                                               betas=(0.9, 0.999))
             self.optimizers.append(self.mvs_optimizer)
+
+
+        # todo 修改bpnet的lr
+        if len(bpnet_params) > 0:
+            self.optimizer = torch.optim.Adam(bpnet_params,
+                                          lr=opt.lr,
+                                          betas=(0.9, 0.999))
+            self.optimizers.append(self.optimizer)
 
         if len(net_params) > 0:
             self.optimizer = torch.optim.Adam(net_params,

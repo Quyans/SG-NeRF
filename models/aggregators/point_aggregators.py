@@ -225,6 +225,28 @@ class PointAggregator(torch.nn.Module):
             # default="LeakyReLU",
             help='1 to use softplus and widden sigmoid for last activation')
 
+        parser.add_argument('--predict_semantic',
+                            type=int,
+                            default=0,
+                            help='if 0:donot use BPNet to predict semantic;1 use BPNet to predict semantic label')
+        parser.add_argument('--layers_2d',
+                            type=int,
+                            default=34,
+                            help='BPNet 2dUnet layers')
+        parser.add_argument('--classes',
+                            type=int,
+                            default=20,
+                            help='BPNet predict types')
+        parser.add_argument('--arch_3d',
+                            type=str,
+                            default="MinkUNet18A",
+                            help='BPNet arch_3d')     
+        parser.add_argument('--bpnetweight',
+                            type=str,
+                            default="/home/vr717/Documents/qys/code/NSEPN/BPNet_qys/Data/ScanNet24102/initmodel/bpnet_5cm.pth.tar",
+                            help='bpnet pretrained model weight'
+        )
+
     def __init__(self, opt):
 
         super(PointAggregator, self).__init__()
@@ -287,7 +309,7 @@ class PointAggregator(torch.nn.Module):
         dist_xyz_dim = self.dist_dim if opt.dist_xyz_freq == 0 else 2 * abs(opt.dist_xyz_freq) * self.dist_dim
         in_channels = opt.point_features_dim + (0 if opt.agg_feat_xyz_mode == "None" else self.pnt_channels) - (opt.weight_feat_dim if opt.agg_distance_kernel in ["feat_intrp", "meta_intrp"] else 0) - (opt.sh_degree ** 2 if opt.agg_distance_kernel == "sh_intrp" else 0) - (7 if opt.agg_distance_kernel == "gau_intrp" else 0)
         in_channels += (2 * opt.num_feat_freqs * in_channels if opt.num_feat_freqs > 0 else 0) + (dist_xyz_dim if opt.agg_intrp_order > 0 else 0)
-
+        
         if opt.shading_feature_mlp_layer1 > 0:#2
             out_channels = opt.shading_feature_num
             block1 = []
@@ -380,7 +402,7 @@ class PointAggregator(torch.nn.Module):
 
         for m in block_init_lst:
             init_seq(m)
-
+     
 
     def passfunc(self, input):
         return input

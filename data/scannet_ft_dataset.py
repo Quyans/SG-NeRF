@@ -249,7 +249,8 @@ class ScannetFtDataset(BaseDataset):
             '--img_wh',
             type=int,
             nargs=2,
-            default=(640, 480),
+            # default=(640, 480),
+            default=(320, 240),
             help='resize target of the image'
         )
         parser.add_argument(
