@@ -612,7 +612,7 @@ def main():
         print(opt.checkpoints_dir + opt.name + "/*_net_ray_marching.pth")
         if len([n for n in glob.glob(opt.checkpoints_dir + opt.name + "/*_net_ray_marching.pth") if os.path.isfile(n)]) > 0:#has raymarching
             #Here maybe rendering a plane ,not 360
-            if opt.bgmodel.endswith("plane"):
+            if opt.bgmodel.endswith("plane"): #False
                 _, _, _, _, _, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst = gen_points_filter_embeddings(train_dataset, visualizer, opt)
 
             resume_dir = os.path.join(opt.checkpoints_dir, opt.name)
@@ -754,7 +754,7 @@ def main():
                 cam_xyz_all = (torch.cat([points_xyz_all[i], torch.ones_like(points_xyz_all[i][...,-1:])], dim=-1) @ w2c.transpose(0,1))[..., :3]
                 cam_label_all = points_label_all[i]
                 # embedding->图像卷积后的feature，点采样，过个mlp得到的
-                embedding, color, dir, conf = model.query_embedding(HDWD, cam_xyz_all[None,...], None, batch['images'].cuda(), c2w[None, None,...], w2c[None, None,...], intrinsic[:, None,...], 0, pointdir_w=True)
+                embedding, color, dir, conf = model.query_embedding(HDWD, cam_xyz_all[None,...], None, batch['full_image'].cuda(), c2w[None, None,...], w2c[None, None,...], intrinsic[:, None,...], 0, pointdir_w=True)
                 conf = conf * opt.default_conf if opt.default_conf > 0 and opt.default_conf < 1.0 else conf
                 points_embedding_all = torch.cat([points_embedding_all, embedding], dim=1)
                 points_color_all = torch.cat([points_color_all, color], dim=1)
@@ -787,13 +787,17 @@ def main():
                 points_color_all = torch.cat([points_color_all, gen_dir], dim=1)
                 points_dir_all = torch.cat([points_dir_all, gen_color], dim=1)
                 points_conf_all = torch.cat([points_conf_all, gen_conf], dim=1)
-            model.set_points(points_xyz = points_xyz_all.cuda(),points_feats = points_feats_all.cuda(), points_label = points_label_all.cuda(), points_embedding = points_embedding_all.cuda(), points_color=points_color_all.cuda(),
+            # model.set_points(points_xyz = points_xyz_all.cuda(),points_feats = points_feats_all.cuda(), points_label = points_label_all.cuda(), points_embedding = points_embedding_all.cuda(), points_color=points_color_all.cuda(),
+            #                  points_dir=points_dir_all.cuda(), points_conf=points_conf_all.cuda(),
+            #                  Rw2c=normRw2c.cuda() if opt.load_points < 1 and opt.normview != 3 else None)
+            model.set_points(points_xyz = points_xyz_all.cuda(),points_feats = points_feats_all.cuda(), points_embedding = points_embedding_all.cuda(), points_color=points_color_all.cuda(),
                              points_dir=points_dir_all.cuda(), points_conf=points_conf_all.cuda(),
                              Rw2c=normRw2c.cuda() if opt.load_points < 1 and opt.normview != 3 else None)
             epoch_count = 1
             total_steps = 0
             del points_xyz_all, points_embedding_all, points_color_all, points_dir_all, points_conf_all
 
+    # 在这里配置模型 调用mvs_points_volumetric_model
     model.setup(opt, train_len=len(train_dataset))
     model.train()
     data_loader = create_data_loader(opt, dataset=train_dataset)

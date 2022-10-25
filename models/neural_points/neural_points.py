@@ -337,8 +337,6 @@ class NeuralPoints(nn.Module):
 
             if saved_features is not None and "neural_points.xyz" in saved_features:#true
                 self.xyz = nn.Parameter(saved_features["neural_points.xyz"])
-                # self.points_feats = nn.Parameter(saved_features["neural_points.points_feats"])
-                # self.points_label = nn.Parameter(saved_features["neural_points.points_label"])
 
             else:
 
@@ -373,12 +371,13 @@ class NeuralPoints(nn.Module):
                 # self.points_feats = nn.Parameter(saved_features["neural_points.points_feats"], requires_grad=False)
                 # self.points_label = nn.Parameter(saved_features["neural_points.points_label"], requires_grad=False)
 
-                try:
-                    self.points_feats = nn.Parameter(saved_features["neural_points.points_feats"], requires_grad=False)
-                    self.points_label = nn.Parameter(saved_features["neural_points.points_label"], requires_grad=False)
-                except:
-                    self.points_feats = None
-                    self.points_label = None
+                self.points_feats = nn.Parameter(saved_features["neural_points.points_feats"], requires_grad=False)
+                # try:
+                #     self.points_feats = nn.Parameter(saved_features["neural_points.points_feats"], requires_grad=False)
+                #     self.points_label = nn.Parameter(saved_features["neural_points.points_label"], requires_grad=False)
+                # except:
+                #     self.points_feats = None
+                #     self.points_label = None
 
                 self.points_embeding = nn.Parameter(saved_features["neural_points.points_embeding"]) if "neural_points.points_embeding" in saved_features else None
                 print("self.points_embeding", self.points_embeding.shape)
@@ -436,7 +435,7 @@ class NeuralPoints(nn.Module):
         self.lighting_fast_querier = lighting_fast_querier_w if self.opt.wcoord_query > 0 else lighting_fast_querier_p
         self.querier = self.lighting_fast_querier(device, self.opt)
 
-        # # 初始化bpnet
+        ''' 初始化bpnet
         # self.SCALE_AUGMENTATION_BOUND = (0.9, 1.1)
         # self.ROTATION_AUGMENTATION_BOUND = ((-np.pi / 64, np.pi / 64), (-np.pi / 64, np.pi / 64), (-np.pi,
         #                                                                                     np.pi))
@@ -508,6 +507,7 @@ class NeuralPoints(nn.Module):
         #                 ignore_label=255),
         #         t_2d.ToTensor(),
         #         t_2d.Normalize(mean=mean, std=std)])
+        '''
 
     def reset_querier(self):
         self.querier.clean_up()
@@ -580,18 +580,22 @@ class NeuralPoints(nn.Module):
             self.Rw2c = nn.Parameter(torch.cat([self.Rw2c, add_Rw2c[None,...]], dim=1))
             self.Rw2c.requires_grad = False
 
-    def set_points(self, points_xyz,points_feats,points_label,points_embeding, points_color=None, points_dir=None, points_conf=None,points_semantic=None, parameter=False, Rw2c=None, eulers=None):
+    # def set_points(self, points_xyz,points_feats,points_label,points_embeding, points_color=None, points_dir=None, points_conf=None,points_semantic=None, parameter=False, Rw2c=None, eulers=None):
+    def set_points(self, points_xyz,points_feats,points_embeding,points_label=None, points_color=None, points_dir=None, points_conf=None,points_semantic=None, parameter=False, Rw2c=None, eulers=None):
         if points_embeding.shape[-1] > self.opt.point_features_dim:#No
             points_embeding = points_embeding[..., :self.opt.point_features_dim]
         if self.opt.default_conf > 0.0 and self.opt.default_conf <= 1.0 and points_conf is not None:#No
             points_conf = torch.ones_like(points_conf) * self.opt.default_conf
         #默认参数全是1全会回归啊啊啊
+        print("parameter:",parameter)
         if parameter:
             self.xyz = nn.Parameter(points_xyz)#不会对点云做grad
             self.xyz.requires_grad = self.opt.xyz_grad > 0
             # Todo 这里应该是requires_grad = true
-            self.points_label = nn.Parameter(points_label,requires_grad=False)
+            if points_label is not None:
+                self.points_label = nn.Parameter(points_label,requires_grad=False)
             
+            print("points_feats",points_feats.shape)
             self.points_feats = nn.Parameter(points_feats,requires_grad=False)
             if points_feats is not None:
                 print("points feats")
@@ -655,6 +659,11 @@ class NeuralPoints(nn.Module):
             self.Rw2c = nn.Parameter(Rw2c)
             self.Rw2c.requires_grad = False
 
+    def set_bpnet_feats(self,points_label_prob,points_label,bpnet_points_embedding):
+        self.points_label_prob = points_label_prob
+        self.points_label = points_label[...,None]    #[122598,1]
+        if bpnet_points_embedding is not None:
+            self.bpnet_points_embedding = bpnet_points_embedding
 
     def editing_set_points(self, points_xyz, points_embeding, points_color=None, points_dir=None, points_conf=None,
                    parameter=False, Rw2c=None, eulers=None):
@@ -772,7 +781,12 @@ class NeuralPoints(nn.Module):
         #ranges_np[-1.6265 -1.9573 -3.2914 3.868 4.070 2.417]
 
         # 这里需要改！！！！！
-        sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor,sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = self.querier.query_points(pixel_idx_tensor,pixel_label_tensor, point_xyz_pers_tensor, self.xyz[None,...],self.points_label[None,...], actual_numpoints_tensor, h, w, intrinsic, near_plane, far_plane, ray_dirs_tensor,ray_label_tensor, cam_pos_tensor, cam_rot_tensor)
+        sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor,sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = \
+            self.querier.query_points(pixel_idx_tensor,pixel_label_tensor, point_xyz_pers_tensor, self.xyz[None,...],self.points_label[None,...],self.points_label_prob[None,...], actual_numpoints_tensor, h, w, \
+                intrinsic, near_plane, far_plane, ray_dirs_tensor,ray_label_tensor, cam_pos_tensor, cam_rot_tensor)
+        # sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor,sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = \
+        #     self.querier.query_points(pixel_idx_tensor,pixel_label_tensor, point_xyz_pers_tensor, self.xyz[None,...],self.points_label[None,...], actual_numpoints_tensor, h, w, \
+        #         intrinsic, near_plane, far_plane, ray_dirs_tensor,ray_label_tensor, cam_pos_tensor, cam_rot_tensor)
         # sample_pidx_tensor[1,784,24,8];sample_loc_tensor[1,784,24,3];sample_loc_w_tensor[1,784,24,3];sample_ray_dirs_tensor[1,784,24,3];ray_mask_tensor[1,784]
         #loc_w ? whats meaning
         B, _, SR, K = sample_pidx_tensor.shape#B1 SR24 K 8
@@ -965,57 +979,13 @@ class NeuralPoints(nn.Module):
     def getPointsData(self):
         locs_in = self.xyz.data.cpu().numpy().copy()
         feats_in = self.points_feats.data.cpu().numpy().copy()
-        labels_in = self.points_label.data.cpu().numpy().copy()
-        return locs_in,feats_in,labels_in
+        # labels_in = self.points_label.data.cpu().numpy().copy()
+        return locs_in,feats_in
 
     def forward(self, inputs):
 
-        pixel_idx, camrotc2w, campos, near_plane, far_plane, h, w, intrinsic,pixel_label,train_id_paths,test_id_paths = inputs["pixel_idx"].to(torch.int32), inputs["camrotc2w"], inputs["campos"], inputs["near"], inputs["far"], inputs["h"], inputs["w"], inputs["intrinsic"],inputs["pixel_label"],inputs["train_id_paths"],inputs["test_id_paths"]
-        
-        # print("fuck!!!forward")
-        
-        # Bpnet部分
-        # locs_in = self.xyz.data.cpu().numpy().copy()
-        # feats_in = self.points_feats.data.cpu().numpy().copy()
-        # labels_in = self.points_label.data.cpu().numpy().copy()
-        # # import copy
-        # # locs_in = copy.deepcopy(self.xyz.data.cpu().numpy())
-        # # feats_in = copy.deepcopy(self.points_feats.data.cpu().numpy())
-        # # labels_in = copy.deepcopy(self.points_label.data.cpu().numpy())
-
-        # # colors, labels_2d, links = self.get_2d(train_id_paths, locs_in)
-        # colors, links = self.get_2d(train_id_paths, locs_in)
-        
-        # locs = self.prevoxel_transforms(locs_in) if self.aug else locs_in
-        # locs, feats, labels_3d, inds_reconstruct, links = self.voxelizer.voxelize(locs, feats_in,labels_in, link=links)
-        # coords = torch.from_numpy(locs).int()
-        # coords = torch.cat((torch.ones(coords.shape[0], 1, dtype=torch.int), coords), dim=1)
-        # # feats = torch.from_numpy(feats).float() / 127.5 - 1.
-        # feats = torch.from_numpy(feats).float()
-        # labels_3d = labels_in
-        # labels_3d = torch.from_numpy(labels_3d).long()
-        
-        # inds_reconstruct = torch.from_numpy(inds_reconstruct).long()
-        
-        # colors = torch.stack([colors])
-        # # labels_2d = torch.stack([labels_2d])
-        
-        # # 在这里需要对数据的进行一步预处理 对应scanNetCross.py 239行
-        # coords[:,0] *= 0
-        # links[:,0,:]*=0
-        
-        # sinput = SparseTensor(feats.cuda(non_blocking=True), coords.cuda(non_blocking=True))
-        # # sinput = SparseTensor(feats,coords)
-        # colors, links = colors.cuda(non_blocking=True), links.cuda(non_blocking=True)
-        # # labels_3d, labels_2d = labels_3d.cuda(non_blocking=True), labels_2d.cuda(non_blocking=True)
-
-        # output_3d, output_2d =  self.bpnetmodel(sinput, colors, links)
-        # output_3d = output_3d[inds_reconstruct, :]
-         # Bpnet部分
-        
-        
-
-        
+        pixel_idx, camrotc2w, campos, near_plane, far_plane, h, w, intrinsic,pixel_label = inputs["pixel_idx"].to(torch.int32), inputs["camrotc2w"], inputs["campos"], inputs["near"], inputs["far"], inputs["h"], inputs["w"], inputs["intrinsic"],inputs["pixel_label"]
+ 
         # 1, 294, 24, 32;   1, 294, 24;     1, 291, 2
         # sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
         # sample_loc_tensor[1,784,24,3]存某个pixel需要query的点的坐标，换坐标系了，应该从世界坐标系转到了pers（相机坐标系？）
@@ -1025,7 +995,7 @@ class NeuralPoints(nn.Module):
         # sample_ray_dirs_tensor[1,784,24,3]存dir,24个点的3d方向向量相同
         #vsize：voxel size [0.008 0.008 0.008]
         #pixel_label!新加入的[1,784,1]Label ray
-        sample_pidx, sample_loc,ray_mask_tensor, point_xyz_pers_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, vsize = self.get_point_indices(inputs, camrotc2w, campos, pixel_idx,pixel_label, torch.min(near_plane).cpu().numpy(), torch.max(far_plane).cpu().numpy(), torch.max(h).cpu().numpy(), torch.max(w).cpu().numpy(), intrinsic.cpu().numpy()[0], vox_query=self.opt.NN<0)
+        sample_pidx, sample_loc,ray_mask_tensor, point_xyz_pers_tensor, sample_loc_w_tensor, sample_ray_dirs_tensor, vsize = self.get_point_indices(inputs, camrotc2w, campos, pixel_idx, pixel_label, torch.min(near_plane).cpu().numpy(), torch.max(far_plane).cpu().numpy(), torch.max(h).cpu().numpy(), torch.max(w).cpu().numpy(), intrinsic.cpu().numpy()[0], vox_query=self.opt.NN<0)
         sample_pnt_mask = sample_pidx >= 0#[1,784,24,8]，colmap点云的msk
         B, R, SR, K = sample_pidx.shape#B：batch，R：sampled_pixel;SR:24一个ray最多query的点 K: 8一个query点的max num neighbour
         sample_pidx = torch.clamp(sample_pidx, min=0).view(-1).long()#sample_pidx = 150528

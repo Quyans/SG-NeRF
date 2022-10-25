@@ -5,7 +5,7 @@ from turtle import forward
 import numpy as np
 
 import torch
-from torch import nn
+from torch import nn, softmax
 import torch.nn.functional as F
 
 from .unet_2d import ResUnet as model2D
@@ -22,6 +22,7 @@ from asyncio.log import logger
 import random
 import imageio
 import math
+from PIL import Image
 
 def state_dict_remove_moudle(state_dict):
     new_state_dict = OrderedDict()
@@ -113,8 +114,9 @@ class BPNet(nn.Module):
         self.ROTATION_AXIS = 'z'
         self.LOCFEAT_IDX = 2
         
-        # self.VIEW_NUM = 3
-        self.IMG_DIM = (320, 240)
+        # self.VIEW_NUM = 3 todo设置可变的
+        # self.IMG_DIM = (320, 240)
+        self.IMG_DIM = cfg.img_wh
         self.voxelizer = Voxelizer(
             voxel_size=voxelSize,
             clip_bound=None,
@@ -146,9 +148,10 @@ class BPNet(nn.Module):
                 t_2d.ToTensor(),
                 t_2d.Normalize(mean=mean, std=std)])
         else:
+            # 这里设置为center 而不是rand
             self.transform_2d = t_2d.Compose([
-                t_2d.Crop([self.IMG_DIM[1] + 1, self.IMG_DIM[0] + 1], crop_type='rand', padding=mean,
-                        ignore_label=255),
+                # t_2d.Crop([self.IMG_DIM[1] + 1, self.IMG_DIM[0] + 1], crop_type='center', padding=mean,
+                #         ignore_label=255),
                 t_2d.ToTensor(),
                 t_2d.Normalize(mean=mean, std=std)])
 
@@ -263,11 +266,67 @@ class BPNet(nn.Module):
 
         res_3d_feat = self.layer9_3d(ME.cat(feat_3d, out_p1)) #18404,96
         res_3d = self.cls_3d(res_3d_feat) #18404,20    input:sparse_3d 18404 3
-        return res_3d.F, res_2d,res_3d_feat
+
+        # 将输出softmax到0~1里面  max概率小于0.5的有386个体素 共两万个   统计方法 np.sum((softmax3d.detach().max(1)[0]<0.5).cpu().numpy()!=False)
+        softmax3d = torch.softmax(res_3d.F,dim=1)
+        # temnum = (softmax3d.detach().max(1)[0]<0.5).cpu().numpy()
+        
+        return softmax3d, res_2d,res_3d_feat
     
     
     
-    def get_2d(self,train_id_paths, coords: np.ndarray):
+    # def get_2d(self,train_id_paths, coords: np.ndarray):
+    #     """
+    #     :param      coords: Nx3
+    #     :return:    imgs:   CxHxWxV Tensor
+    #                 labels: HxWxV Tensor
+    #                 links: Nx4xV(1,H,W,mask) Tensor
+    #     """
+    #     # 默认为False
+    #     self.val_benchmark = False
+    #     frames_path = train_id_paths[0]
+    #     #frames_path 是這個場景的训练集所有图片 对于scannet241是100帧
+    #     # print(room_id)
+    #     partial = int(len(frames_path) / self.viewNum)
+    #     imgs, labels, links = [], [], []
+    #     for v in range(self.viewNum):
+    #         if not self.val_benchmark:
+    #             f = random.sample(frames_path[v * partial:v * partial + partial], k=1)[0][0]
+    #         else:
+    #             select_id = (v * partial+self.offset) % len(frames_path)
+    #             # select_id = (v * partial+partial//2)
+    #             f = frames_path[select_id]
+    #         # pdb.set_trace()
+    #         img = imageio.imread(f)
+    #         label = imageio.imread(f.replace('color', 'label').replace('jpg', 'png'))
+            
+    #         # label = self.remapper[label] # 这里可以不用搞因为这里的语义label都已经处理过了，如果没有处理过需要用到这里
+            
+    #         depth = imageio.imread(f.replace('color', 'depth').replace('jpg', 'png')) / 1000.0  # convert to meter
+    #         posePath = f.replace('color', 'pose').replace('.jpg', '.txt')
+    #         pose = np.asarray(
+    #             [[float(x[0]), float(x[1]), float(x[2]), float(x[3])] for x in
+    #              (x.split(" ") for x in open(posePath).read().splitlines())]
+    #         )
+    #         # pdb.set_trace()
+    #         link = np.ones([coords.shape[0], 4], dtype=np.int)
+    #         link[:, 1:4] = self.linkCreator.computeLinking(pose, coords, depth)
+    #         temimg = img
+    #         temlabel =label
+    #         img = self.transform_2d(img)
+    #         imgs.append(img)
+    #         # labels.append(label)
+    #         links.append(link)
+
+    #     imgs = torch.stack(imgs, dim=-1)
+    #     # labels = torch.stack(labels, dim=-1)
+    #     links = np.stack(links, axis=-1)
+    #     links = torch.from_numpy(links)
+    #     return imgs, links
+
+
+
+    def get_2d(self,train_id_paths, coords: np.ndarray,image_path):
         """
         :param      coords: Nx3
         :return:    imgs:   CxHxWxV Tensor
@@ -282,29 +341,70 @@ class BPNet(nn.Module):
         partial = int(len(frames_path) / self.viewNum)
         imgs, labels, links = [], [], []
         for v in range(self.viewNum):
-            if not self.val_benchmark:
-                f = random.sample(frames_path[v * partial:v * partial + partial], k=1)[0][0]
-            else:
-                select_id = (v * partial+self.offset) % len(frames_path)
+
+            # 这里三个f都是同一个文件
+            image_pa = image_path[0]
+            
+            if tuple([image_pa,]) in frames_path[v * partial:v * partial + partial]:
+                imgio = imageio.imread(image_pa)
+                img = Image.open(image_pa)
+                img = img.resize(self.IMG_DIM, Image.NEAREST)
+                img = np.array(img, dtype='float32')
+                # label = imageio.imread(image_pa.replace('color', 'label').replace('jpg', 'png'))
+                label = Image.open(image_pa.replace('color', 'label').replace('jpg', 'png'))
+                label = label.resize(self.IMG_DIM, Image.NEAREST)
+                label = np.array(label, dtype='float32')
+                # label = self.remapper[label] # 这里可以不用搞因为这里的语义label都已经处理过了，如果没有处理过需要用到这里
+                # depth = imageio.imread(image_pa.replace('color', 'depth').replace('jpg', 'png')) / 1000.0  # convert to meter
+                depth = Image.open(image_pa.replace('color', 'depth').replace('jpg', 'png'))
+                depth = depth.resize(self.IMG_DIM, Image.NEAREST)
+                depth = np.array(depth, dtype='float32') / 1000.0  # convert to meter
+
+                posePath = image_pa.replace('color', 'pose').replace('.jpg', '.txt')
+                pose = np.asarray(
+                    [[float(x[0]), float(x[1]), float(x[2]), float(x[3])] for x in
+                    (x.split(" ") for x in open(posePath).read().splitlines())]
+                )
+                # pdb.set_trace()
+                link = np.ones([coords.shape[0], 4], dtype=np.int)
+                link[:, 1:4] = self.linkCreator.computeLinking(pose, coords, depth)
+
+                img = self.transform_2d(img)
+                imgs.insert(0,img)
+                # labels.append(label)
+                links.insert(0,link)
+                continue
+            f = random.sample(frames_path[v * partial:v * partial + partial], k=1)[0][0]
+            # if not self.val_benchmark:
+            #     f = random.sample(frames_path[v * partial:v * partial + partial], k=1)[0][0]
+            # else:
+            #     select_id = (v * partial+self.offset) % len(frames_path)
                 # select_id = (v * partial+partial//2)
-                f = frames_path[select_id]
+                # f = frames_path[select_id]
             # pdb.set_trace()
-            img = imageio.imread(f)
-            label = imageio.imread(f.replace('color', 'label').replace('jpg', 'png'))
-            
+            imgio = imageio.imread(image_pa)
+            img = Image.open(image_pa)
+            img = img.resize(self.IMG_DIM, Image.NEAREST)
+            img = np.array(img, dtype='float32')
+            # label = imageio.imread(image_pa.replace('color', 'label').replace('jpg', 'png'))
+            label = Image.open(image_pa.replace('color', 'label').replace('jpg', 'png'))
+            label = label.resize(self.IMG_DIM, Image.NEAREST)
+            label = np.array(label, dtype='float32')
             # label = self.remapper[label] # 这里可以不用搞因为这里的语义label都已经处理过了，如果没有处理过需要用到这里
-            
-            depth = imageio.imread(f.replace('color', 'depth').replace('jpg', 'png')) / 1000.0  # convert to meter
-            posePath = f.replace('color', 'pose').replace('.jpg', '.txt')
+            # depth = imageio.imread(image_pa.replace('color', 'depth').replace('jpg', 'png')) / 1000.0  # convert to meter
+            depth = Image.open(image_pa.replace('color', 'depth').replace('jpg', 'png'))
+            depth = depth.resize(self.IMG_DIM, Image.NEAREST)
+            depth = np.array(depth, dtype='float32') / 1000.0  # convert to meter
+
+            posePath = image_pa.replace('color', 'pose').replace('.jpg', '.txt')
             pose = np.asarray(
                 [[float(x[0]), float(x[1]), float(x[2]), float(x[3])] for x in
-                 (x.split(" ") for x in open(posePath).read().splitlines())]
+                (x.split(" ") for x in open(posePath).read().splitlines())]
             )
             # pdb.set_trace()
             link = np.ones([coords.shape[0], 4], dtype=np.int)
             link[:, 1:4] = self.linkCreator.computeLinking(pose, coords, depth)
-            temimg = img
-            temlabel =label
+
             img = self.transform_2d(img)
             imgs.append(img)
             # labels.append(label)
@@ -316,21 +416,21 @@ class BPNet(nn.Module):
         links = torch.from_numpy(links)
         return imgs, links
 
-    def bpnet_forward(self,train_id_paths):
-        locs_in,feats_in,labels_in = self.neural_points.getPointsData()
 
-    def train_bpnet(self,locs_in,feats_in,labels_in,train_id_paths):
+    def train_bpnet(self,locs_in,feats_in,train_id_paths,image_path):
 
-        colors, links = self.get_2d(train_id_paths, locs_in)
+        colors, links = self.get_2d(train_id_paths, locs_in,image_path)
         
         locs = self.prevoxel_transforms(locs_in) if self.aug else locs_in
-        locs, feats, labels_3d, inds_reconstruct, links = self.voxelizer.voxelize(locs, feats_in,labels_in, link=links)
+        locs, feats, labels_3d, inds_reconstruct, links = self.voxelizer.voxelize(locs, feats_in, link=links)
         coords = torch.from_numpy(locs).int()
         coords = torch.cat((torch.ones(coords.shape[0], 1, dtype=torch.int), coords), dim=1)
         # feats = torch.from_numpy(feats).float() / 127.5 - 1.
+        # feats = torch.from_numpy(feats).float() / 127.5 -1.
         feats = torch.from_numpy(feats).float()
-        labels_3d = labels_in
-        labels_3d = torch.from_numpy(labels_3d).long()
+
+        # labels_3d = labels_in
+        # labels_3d = torch.from_numpy(labels_3d).long()
         
         inds_reconstruct = torch.from_numpy(inds_reconstruct).long()
         
@@ -346,12 +446,19 @@ class BPNet(nn.Module):
         colors, links = colors.cuda(non_blocking=True), links.cuda(non_blocking=True)
         # labels_3d, labels_2d = labels_3d.cuda(non_blocking=True), labels_2d.cuda(non_blocking=True)
 
-        output_3d, output_2d, point_inside_feat =  self.forward(sinput, colors, links)
-        output_3d = output_3d[inds_reconstruct, :]
+        output_3d_prob, output_2d, point_inside_feat_ST =  self.forward(sinput, colors, links)
+        output_3d_prob = output_3d_prob[inds_reconstruct, :]
 
-        output_3d = output_3d.detach().max(1)[1]
+        point_inside_feat = point_inside_feat_ST.F[inds_reconstruct,:]
+        output_3d = output_3d_prob.detach().max(1)[1]
+        # output_3d = output_3d.resize(output_3d.shape[0],1).cpu().numpy() #将数据从 [125988] -> [125988,1]
         output_2d = output_2d.detach().max(1)[1]
+        output_2d = output_2d[0,:,:,0]
+        output_2d = output_2d.reshape(1,self.IMG_DIM[1],self.IMG_DIM[0],1)
 
-        return output_3d,output_2d,point_inside_feat
+        # 返回的output_2d 应该是[240,320,1 ] 
+        # output_3d  [122598]  0~19
+        # output_3d_prob [122598,20]
+        return output_3d,output_3d_prob,output_2d,point_inside_feat
 
 

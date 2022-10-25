@@ -204,7 +204,8 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
 
             print(self.opt == opt)
             bpnet = BPNet(opt)
-            if opt.bpnetweight:
+            # =2的时候是load checkpoints 
+            if opt.bpnetweight and opt.mode!=2:
                 logger.info("=> loading bpnet weight '{}'".format(opt.bpnetweight))
                 checkpoint = torch.load(opt.bpnetweight)
                 # model.load_state_dict(checkpoint['state_dict'])
@@ -314,15 +315,30 @@ class NeuralPointsRayMarching(nn.Module):
                 intrinsic=None,
                 pixel_label=None,
                 train_id_paths=None,
-                test_id_paths=None,
+                # test_id_paths=None,
+                image_path=None,
                 **kargs):
         output = {}
 
-        # 提前做bpnet的方法
-        locs_in,feats_in,labels_in = self.neural_points.getPointsData()
-        # def train(self,locs_in,feats_in,labels_in,train_id_paths):
-        bpnet_points_label,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in,labels_in,train_id_paths)
+        if self.opt.predict_semantic:
+            # 提前做bpnet的方法
+            locs_in,feats_in = self.neural_points.getPointsData()
+            bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in,train_id_paths,image_path)
+            # 处理平铺展开
+            # 处理成1 32 32 1的label
 
+            # 原本points_label [122598,1] 改为[122598,20]
+            # 把pointslabel set进去
+            self.neural_points
+            px = pixel_idx[...,0].type(torch.int64)
+            py = pixel_idx[...,1].type(torch.int64)
+            pixel_label_sample = bpnet_pixel_label[0,py,px,:]
+            self.neural_points.set_bpnet_feats(bpnet_points_label_prob,bpnet_points_label,bpnet_points_embedding)
+            sampled_color, sampled_label,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w,sample_ray_dirs, ray_mask_tensor, vsize, grid_vox_sz \
+                = self.neural_points({"pixel_idx": pixel_idx, "camrotc2w": camrotc2w, "campos": campos, "near": near, "far": far,"focal": focal, "h": h, "w": w, "intrinsic": intrinsic,"gt_image":gt_image, "raydir":raydir,"pixel_label":pixel_label_sample})
+        else:
+            sampled_color, sampled_label,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w,sample_ray_dirs, ray_mask_tensor, vsize, grid_vox_sz \
+                = self.neural_points({"pixel_idx": pixel_idx, "camrotc2w": camrotc2w, "campos": campos, "near": near, "far": far,"focal": focal, "h": h, "w": w, "intrinsic": intrinsic,"gt_image":gt_image, "raydir":raydir,"pixel_label":None})
         # B, channel, 292, 24, 32 ;      B, 3, 294, 24, 32;     B, 294, 24;     B, 291, 2
         # sampled_color[1,784,24,8,3]原始点云input的颜色;
         # sampled_Rw2c[3,3]-ones(3);
@@ -338,7 +354,7 @@ class NeuralPointsRayMarching(nn.Module):
         # ray_mask_tensor[1,784];
         # vsize=[0.0008,0.0008,0.0008]；
         # grid_vox_sz = 0
-        sampled_color, sampled_label,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w,sample_ray_dirs, ray_mask_tensor, vsize, grid_vox_sz = self.neural_points({"pixel_idx": pixel_idx, "camrotc2w": camrotc2w, "campos": campos, "near": near, "far": far,"focal": focal, "h": h, "w": w, "intrinsic": intrinsic,"gt_image":gt_image, "raydir":raydir,"pixel_label":pixel_label,"train_id_paths":train_id_paths,"test_id_paths":test_id_paths})
+        
         #decoded_features[1,784,24,4]->(color+alpha)
         #ray_valid[1,784,24]
         #weight[1,784,24,8]

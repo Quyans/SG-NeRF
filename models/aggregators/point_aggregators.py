@@ -255,7 +255,7 @@ class PointAggregator(torch.nn.Module):
         self.point_hyper_dim=opt.point_hyper_dim if opt.point_hyper_dim < opt.point_features_dim else opt.point_features_dim#32
 
         block_init_lst = []
-        if opt.agg_distance_kernel == "feat_intrp":
+        if opt.agg_distance_kernel == "feat_intrp": #false
             feat_weight_block = []
             in_channels = 2 * opt.weight_xyz_freq * 3 + opt.weight_feat_dim
             out_channels = int(in_channels / 2)
@@ -267,7 +267,7 @@ class PointAggregator(torch.nn.Module):
             feat_weight_block.append(nn.Sigmoid())
             self.feat_weight_mlp = nn.Sequential(*feat_weight_block)
             block_init_lst.append(self.feat_weight_mlp)
-        elif opt.agg_distance_kernel == "sh_intrp":
+        elif opt.agg_distance_kernel == "sh_intrp":  #false
             self.shcomp = SphericalHarm(opt.sh_degree)
 
         self.opt = opt

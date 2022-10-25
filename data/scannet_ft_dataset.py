@@ -314,7 +314,7 @@ class ScannetFtDataset(BaseDataset):
                 self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
                 self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
             else:  # nsvf configuration
-                step=100#5
+                step=50#5
                 self.train_id_list = self.all_id_list[::step]
                 self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
         else:
@@ -599,7 +599,7 @@ class ScannetFtDataset(BaseDataset):
         # w2c = np.linalg.inv(c2w)
         intrinsic = self.intrinsic#4*3
 
-        # print("gt_image", gt_image.shape)
+        # print("gt_image", img.shape)
         width, height = img.shape[2], img.shape[1]
         camrot = (c2w[0:3, 0:3])
         campos = c2w[0:3, 3]
@@ -612,6 +612,7 @@ class ScannetFtDataset(BaseDataset):
         gt_semantic_img = gt_semantic_img.resize(self.img_wh, Image.NEAREST)
         gt_semantic_img = self.transform(gt_semantic_img)  # (batch, h, w)
 
+        item["image_path"] = image_path
         item["intrinsic"] = intrinsic
         # item["intrinsic"] = sample['intrinsics'][0, ...]
         item["campos"] = torch.from_numpy(campos).float()
@@ -631,7 +632,7 @@ class ScannetFtDataset(BaseDataset):
         # bounding box
         margin = self.opt.edge_filter# in defalu train ScanNet:10
         if full_img:
-            item['images'] = img[None,...].clone()
+            item['full_image'] = img[None,...].clone()
         gt_image = np.transpose(img, (1, 2, 0))
         gt_semantic_img = np.transpose(gt_semantic_img,(1,2,0))
         subsamplesize = self.opt.random_sample_size
@@ -670,14 +671,14 @@ class ScannetFtDataset(BaseDataset):
         item["pixel_idx"] = pixelcoords
         gt_image = gt_image[py.astype(np.int32), px.astype(np.int32)]
         gt_semantic_image = gt_semantic_img[py.astype(np.int32), px.astype(np.int32)]
-        item["pixel_label"] = gt_semantic_image
-        # print("pixelcoords", pixelcoords.reshape(-1,2)[:10,:])
+        # item["pixel_label"] = gt_semantic_image
+        
         raydir = get_dtu_raydir(pixelcoords, item["intrinsic"], camrot, self.opt.dir_norm > 0)
-        raylabel = gt_semantic_image
+        # raylabel = gt_semantic_image #[32,32,1]
         raydir = np.reshape(raydir, (-1, 3))#应当是一个[28*28,3]
-        raylabel = np.reshape(raylabel,(-1,1))
+        # raylabel = np.reshape(raylabel,(-1,1))  #[1024,1] 
         item['raydir'] = torch.from_numpy(raydir).float()
-        item['raylabel'] = raylabel
+        # item['raylabel'] = raylabel
         # gt_mask = gt_mask[py.astype(np.int32), px.astype(np.int32), :]
         gt_image = np.reshape(gt_image, (-1, 3))
         gt_semantic_image = np.reshape(gt_semantic_image, (-1, 1))
@@ -700,6 +701,8 @@ class ScannetFtDataset(BaseDataset):
         return item
 
 
+    # item['train_id_paths'] = self.train_id_paths
+    # item['test_id_paths'] = self.test_id_paths
 
     def get_item(self, idx, crop=False, full_img=False):
         item = self.__getitem__(idx, crop=crop, full_img=full_img)
