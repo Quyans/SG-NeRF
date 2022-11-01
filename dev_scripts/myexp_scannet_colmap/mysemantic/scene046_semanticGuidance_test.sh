@@ -1,16 +1,16 @@
 #!/bin/bash
 
-semantic_guidance=1
+
 # predict_semantic=0
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
 # name='scene024102_Semantic_step50_debug2'
-name='scene024102_Semantic_step5_debug_640480step5_feats2one'
+name='scene046_02_Semantic_640480step50_feats2one'
 
 resume_iter=best #latest
 
 data_root="${nrDataRoot}/scannet/scans/"
-scan="scene0241_02"
+scan="scene046/scene0046_02"
 
 
 semantic_guidance=0

@@ -426,8 +426,8 @@ class BPNet(nn.Module):
         coords = torch.from_numpy(locs).int()
         coords = torch.cat((torch.ones(coords.shape[0], 1, dtype=torch.int), coords), dim=1)
         # feats = torch.from_numpy(feats).float() / 127.5 - 1.
-        # feats = torch.from_numpy(feats).float() / 127.5 -1.
-        feats = torch.from_numpy(feats).float()
+        feats = torch.from_numpy(feats).float() / 127.5 -1.
+        # feats = torch.from_numpy(feats).float()
 
         # labels_3d = labels_in
         # labels_3d = torch.from_numpy(labels_3d).long()

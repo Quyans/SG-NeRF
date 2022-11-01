@@ -92,7 +92,7 @@ class lighting_fast_querier():
         return np.asarray(radius_limit_np).astype(np.float32), np.asarray(depth_limit_np).astype(np.float32), ranges_np, vsize_np, vdim_np, scaled_vsize_np, scaled_vdim_np, vscale_np, ranges_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, kernel_size_gpu, query_size_gpu
 
     # add pixel_label_tensor
-    def query_points(self, pixel_idx_tensor,pixel_label_tensor, point_xyz_pers_tensor, point_xyz_w_tensor,points_label_tensor,points_label_prob_tensor, actual_numpoints_tensor, h, w, intrinsic, near_depth, far_depth, ray_dirs_tensor,ray_label_tensor ,cam_pos_tensor, cam_rot_tensor):
+    def query_points(self, pixel_idx_tensor, point_xyz_pers_tensor, point_xyz_w_tensor, actual_numpoints_tensor, h, w, intrinsic, near_depth, far_depth, ray_dirs_tensor ,cam_pos_tensor, cam_rot_tensor,pixel_label_tensor=None,points_label_tensor=None,points_label_prob_tensor=None,ray_label_tensor=None):
         near_depth, far_depth = np.asarray(near_depth).item() , np.asarray(far_depth).item()#0.1，8
         radius_limit_np, depth_limit_np, ranges_np, vsize_np, vdim_np, scaled_vsize_np, scaled_vdim_np, vscale_np, range_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, kernel_size_gpu, query_size_gpu = self.get_hyperparameters(self.opt.vsize, point_xyz_w_tensor, ranges=self.opt.ranges)
         # print("self.opt.ranges", self.opt.ranges, range_gpu, ray_dirs_tensor)
@@ -104,9 +104,13 @@ class lighting_fast_querier():
         #sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
         #sample_loc_w_tensor[1,784,24,3],init:all-0，存某个pixel需要query的点的坐标
         #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
-        #raylabel_tensor 扩展到[1,1024,400,1]
-        raylabel_tensor = ray_label_tensor[...,None,:].repeat(1,1,raypos_tensor.shape[2],1)            
-        sample_pidx_tensor, sample_loc_w_tensor,ray_mask_tensor = self.query_grid_point_index(h, w, pixel_idx_tensor,pixel_label_tensor,raypos_tensor, raylabel_tensor,point_xyz_w_tensor,points_label_tensor,points_label_prob_tensor,actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, self.opt.SR, self.opt.K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, self.opt.max_o, self.opt.P, radius_limit_np, depth_limit_np, range_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor, kMaxThreadsPerBlock=self.opt.gpu_maxthr)
+        raylabel_tensor=None
+        if self.opt.semantic_guidance==1:
+            #raylabel_tensor 扩展到[1,1024,400,1]
+            raylabel_tensor = ray_label_tensor[...,None,:].repeat(1,1,raypos_tensor.shape[2],1)            
+            sample_pidx_tensor, sample_loc_w_tensor,ray_mask_tensor = self.query_grid_point_index(h, w, pixel_idx_tensor,pixel_label_tensor,raypos_tensor, raylabel_tensor,point_xyz_w_tensor,points_label_tensor,points_label_prob_tensor,actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, self.opt.SR, self.opt.K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, self.opt.max_o, self.opt.P, radius_limit_np, depth_limit_np, range_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor)
+        else:
+            sample_pidx_tensor, sample_loc_w_tensor,ray_mask_tensor = self.query_grid_point_index(h, w, pixel_idx_tensor,pixel_label_tensor,raypos_tensor, raylabel_tensor,point_xyz_w_tensor,points_label_tensor,points_label_prob_tensor,actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, self.opt.SR, self.opt.K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, self.opt.max_o, self.opt.P, radius_limit_np, depth_limit_np, range_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor)
         sample_ray_dirs_tensor = torch.masked_select(ray_dirs_tensor, ray_mask_tensor[..., None]>0).reshape(ray_dirs_tensor.shape[0],-1,3)[...,None,:].expand(-1, -1, self.opt.SR, -1).contiguous()
         #sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
         #elf.w2pers(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor) sample_loc_w_tensor转了坐标系
@@ -547,6 +551,7 @@ class lighting_fast_querier():
                                             //if((center_label==label_v||label_v==0||center_label==0 || ((center_label!=label_v)&&(seconds%2==0))))
 
                                             if((center_label==label_v||label_v==0||center_label==0 || ((center_label!=label_v)&&(seconds%10<=label_prob))))
+                                            //if((center_label==label_v||label_v==0||center_label==0))
                                             {
                                                 float x_v = (in_data[pidx*3]-centerx);//in_data[pidx*3]：点云坐标；centerx:query点的坐标
                                                 float y_v = (in_data[pidx*3 + 1]-centery);
@@ -773,7 +778,7 @@ class lighting_fast_querier():
 
     #f:[1,676,400,1]每个querry的label
     #points_label_tensor[1,ptr,1]每个点云的label，用这两个信息来guide sampler
-    def query_grid_point_index(self, h, w, pixel_idx_tensor, pixel_label_tensor,raypos_tensor, raylabel_tensor,point_xyz_w_tensor,points_label_tensor,points_label_prob_tensor, actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, SR, K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, max_o, P, radius_limit_np, depth_limit_np, ranges_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor, kMaxThreadsPerBlock = 1024):
+    def query_grid_point_index(self, h, w, pixel_idx_tensor, pixel_label_tensor,raypos_tensor,raylabel_tensor,point_xyz_w_tensor,points_label_tensor,points_label_prob_tensor, actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, SR, K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, max_o, P, radius_limit_np, depth_limit_np, ranges_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor, kMaxThreadsPerBlock=1024):
         #h, w, pixel_idx_tensor, raypos_tensor, point_xyz_w_tensor, actual_numpoints_tensor, kernel_size_gpu, query_size_gpu, self.opt.SR, self.opt.K, ranges_np, scaled_vsize_np, scaled_vdim_np, vscale_np, self.opt.max_o, self.opt.P, radius_limit_np, depth_limit_np, range_gpu, scaled_vsize_gpu, scaled_vdim_gpu, vscale_gpu, ray_dirs_tensor, cam_pos_tensor, kMaxThreadsPerBlock=self.opt.gpu_maxthr
         #scaled_vdim_np:[344,377,357]
         #raypos_tensor[1,784,400,3]<---->将28*28个像素坐标转化成了camera坐标系下的3D坐标;28*28=784
@@ -830,7 +835,8 @@ class lighting_fast_querier():
         sample_pidx_tensor = torch.full([B, R, SR, K], -1, dtype=torch.int32, device=device)#[1,784,24,8]
         if R > 0:#True
             raypos_tensor = torch.masked_select(raypos_tensor, ray_mask_tensor[..., None, None].expand(-1, -1, D, 3)).reshape(B, R, D, 3)
-            raylabel_tensor = torch.masked_select(raylabel_tensor, ray_mask_tensor[..., None, None].expand(-1, -1, D, 1)).reshape(B, R, D, 1)
+            if self.opt.semantic_guidance==1:
+                raylabel_tensor = torch.masked_select(raylabel_tensor, ray_mask_tensor[..., None, None].expand(-1, -1, D, 1)).reshape(B, R, D, 1)
             raypos_mask_tensor = torch.masked_select(raypos_mask_tensor, ray_mask_tensor[..., None].expand(-1, -1, D)).reshape(B, R, D)
             #raypos_mask_tensor：[1,784,400] raypos_maskcum[1,784,400];对每个ray的采样点的msk累加，截止到这个采样点，这个ray之前有多少需要处理的点
             raypos_maskcum = torch.cumsum(raypos_mask_tensor, dim=-1).to(torch.int32)#[1,784,400],按ray做mask的累加

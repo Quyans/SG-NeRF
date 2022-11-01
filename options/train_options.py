@@ -34,6 +34,21 @@ class TrainOptions(BaseOptions):
             type=float,
             default=0.1,
             help='multiply by a gamma every lr_decay_iters iterations')
+        parser.add_argument(
+            '--bpnet_weight_decay',
+            type=float,
+            default=0.0001,
+            help='multiply by a gamma every lr_decay_iters iterations')
+        parser.add_argument(
+            '--bpnet_lr',
+            type=float,
+            default=0.01,
+            help='bpnet lr')
+        parser.add_argument(
+            '--bpnet_momentum',
+            type=float,
+            default=0.9,
+            help='bpnet momentum')
 
         parser.add_argument('--train_and_test',
                             type=int,
@@ -119,5 +134,12 @@ class TrainOptions(BaseOptions):
                             type=str,
                             default=None,
                             help='cartisian distance for prob')
-
+        parser.add_argument('--save_label_iter',
+                            type=int,
+                            default=100000,
+                            help='save bpnet predict label frequency')
+        parser.add_argument('--save_predict_label',
+                            type=int,
+                            default=0,
+                            help='save bpnet predict label frequency')
         return parser

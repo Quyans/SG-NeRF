@@ -1,23 +1,23 @@
 #!/bin/bash
 
-semantic_guidance=1
-# predict_semantic=0
+
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
 # name='scene024102_Semantic_step50_debug2'
-name='scene024102_Semantic_step5_debug_640480step5_feats2one'
+name='scene046_02_Semantic_640480step50_feats2one'
 
 resume_iter=best #latest
 
 data_root="${nrDataRoot}/scannet/scans/"
-scan="scene0241_02"
+scan="scene046/scene0046_02"
 
+img_wh="640 480"
 
-semantic_guidance=0
+semantic_guidance=1
 layers_2d=34
 arch_3d=MinkUNet18A
 classes=20
-predict_semantic=0
+predict_semantic=1
 
 
 load_points=1
@@ -67,7 +67,7 @@ z_depth_dim=400
 max_o=610000
 ranges=" -10.0 -10.0 -10.0 10.0 10.0 10.0 "
 SR=24 # 24
-K=8
+K=8 #8
 P=32 # 32
 NN=2
 
@@ -126,7 +126,9 @@ gpu_ids='0'
 checkpoints_dir="${nrCheckpoint}/scannet/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
-save_iter_freq=100000
+save_predict_label=1 
+save_label_iter=1000 #预测一次
+save_iter_freq=10000
 save_point_freq=10000 #301840 #1
 maximum_step=400000 #500000 #250000 #800000
 
@@ -172,8 +174,9 @@ for i in $(seq 1 $prob_freq $maximum_step)
 
 do
 
-python3 test_ft.py \
+python3 train_ft.py \
         --name $name \
+        --img_wh $img_wh\
         --scan $scan \
         --data_root $data_root \
         --dataset_name $dataset_name \
@@ -300,7 +303,9 @@ python3 test_ft.py \
         --arch_3d $arch_3d \
         --classes $classes \
         --predict_semantic $predict_semantic\
-        
+        --save_label_iter $save_label_iter\
+        --save_predict_label $save_predict_label\
+        --img_wh $img_wh\
         # --semantic_guidance $semantic_guidance
         
         

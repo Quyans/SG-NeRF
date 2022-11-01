@@ -638,6 +638,8 @@ def main():
                 visualizer.print_details('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
                 del states
             # 0 for both mvs and pointnerf, 1 for only mvs, 2 for only pointnerf；由于MVS-NeRF已经初始化好了，所以只做pointnerf部分
+            # opt
+            opt.load_mode = 2
             opt.mode = 2
             opt.load_points=1
             opt.resume_dir=resume_dir
@@ -653,6 +655,7 @@ def main():
         else:#no exsist _net_ray_marching,from MVSNET to generate point feature
             load_points = opt.load_points#2
             opt.is_train = False
+            opt.load_mode = 1 # 1代表重头开始 2
             opt.mode = 1# 初始时候0
             opt.load_points = 0
             model = create_model(opt)
@@ -961,7 +964,15 @@ def main():
                     visualizer.print_details(
                         'nothing to probe, max ray miss is only {}'.format(model.top_ray_miss_loss[0]))
             total_steps += 1
+
+            save_label_switch = False  #是否存预测的label
+            # save_label_switch = True
+            data["train_steps"]=total_steps
+            if opt.save_predict_label > 0 and total_steps % opt.save_label_iter == 0:
+                save_label_switch = True
+            data["save_label_switch"]=save_label_switch
             model.set_input(data)
+            
             if opt.bgmodel.endswith("plane"):#False
                 if len(bg_ray_train_lst) > 0:
                     bg_ray_all = bg_ray_train_lst[data["id"]]
@@ -972,9 +983,12 @@ def main():
                     bg_ray, fg_masks = model.set_bg(xyz_world_sect_plane, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, fg_masks=fg_masks)
                 data["bg_ray"] = bg_ray
 
+            
+
 
             # torch.cuda.set_device(0)
             # model.net_ray_marching.cuda()
+
             model.optimize_parameters(total_steps=total_steps) #
             losses = model.get_current_losses()#{'total': tensor(0.0206, device='cuda:0', grad_fn=<AddBackward0>), 'ray_masked_coarse_raycolor': tensor(0.0213, device='cuda:0', grad_fn=<MseLossBackward>), 'ray_miss_coarse_raycolor': tensor(0., device='cuda:0'), 'coarse_raycolor': tensor(0.0213, device='cuda:0', grad_fn=<MseLossBackward>), 'conf_coefficient': tensor(-6.9088, device='cuda:0', grad_fn=<MeanBackward0>)}
             visualizer.accumulate_losses(losses)
@@ -1131,6 +1145,8 @@ if __name__ == '__main__':
     cudnn.benchmark = True
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.enabled = False
+
+    print("FUCK!!!!!!!!!!!!!!!!!!!1")
     # torch.cuda.set_device(0)
     
 

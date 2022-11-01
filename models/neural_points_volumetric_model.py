@@ -16,6 +16,30 @@ import random
 import imageio
 import math
 
+# 交换地板和墙
+colordict = {
+    0:[174,198,232],
+    1:[151,223,137],
+    2:[31,120,180],
+    3:[255,188,120],
+    4:[188,189,35],
+    5:[140,86,74],
+    6:[255,152,151],
+    7:[213,39,40],
+    8:[196,176,213],
+    9:[148,103,188],
+    10:[196,156,148],
+    11:[23,190,208],
+    12:[247,183,210],
+    13:[218,219,141],
+    14:[254,127,14],
+    15:[227,119,194],
+    16:[158,218,229],
+    17:[43,160,45],
+    18:[112,128,144],
+    19:[82,83,163],
+    255:[255,255,170]    
+}
 
 class NeuralPointsVolumetricModel(BaseRenderingModel):
 
@@ -205,7 +229,7 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
             print(self.opt == opt)
             bpnet = BPNet(opt)
             # =2的时候是load checkpoints 
-            if opt.bpnetweight and opt.mode!=2:
+            if opt.bpnetweight and opt.load_mode!=2:
                 logger.info("=> loading bpnet weight '{}'".format(opt.bpnetweight))
                 checkpoint = torch.load(opt.bpnetweight)
                 # model.load_state_dict(checkpoint['state_dict'])
@@ -317,6 +341,8 @@ class NeuralPointsRayMarching(nn.Module):
                 train_id_paths=None,
                 # test_id_paths=None,
                 image_path=None,
+                save_label_switch=False,
+                train_steps=None,
                 **kargs):
         output = {}
 
@@ -324,12 +350,26 @@ class NeuralPointsRayMarching(nn.Module):
             # 提前做bpnet的方法
             locs_in,feats_in = self.neural_points.getPointsData()
             bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in,train_id_paths,image_path)
+            if save_label_switch:
+                savedata = np.concatenate((locs_in,bpnet_points_label[...,None].cpu().numpy()),axis=-1)
+                predict_label = bpnet_points_label[...,None].cpu().numpy()
+                # print(a)
+                # np.savetxt(os.path.join(self.opt.resume_dir,"predict_label_{}.txt".format(train_steps)),savedata,fmt="%f")
+
+                savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name)
+
+                np.savetxt(os.path.join(savePath,"predict_label_{}.txt".format(train_steps)),predict_label,fmt="%f")
+                print("savetxt",savePath,"predict_label_{}.txt".format(train_steps))
+                # save_label = predict_label
+                pred_colors = []
+                for ind in range(len(predict_label)):
+                    pred_colors.append(colordict[predict_label[ind][0]])
+                save_matrix =  torch.cat((torch.Tensor(locs_in[:,0:3]),torch.Tensor(pred_colors)),dim=1)
+                np.savetxt(os.path.join(savePath,"predict_points_{}.txt".format(train_steps)),save_matrix,fmt="%f")
+                print("savepoints:",os.path.join(savePath,"predict_points_{}.txt".format(train_steps)))
             # 处理平铺展开
             # 处理成1 32 32 1的label
-
-            # 原本points_label [122598,1] 改为[122598,20]
-            # 把pointslabel set进去
-            self.neural_points
+            # points_label为[122598,20]
             px = pixel_idx[...,0].type(torch.int64)
             py = pixel_idx[...,1].type(torch.int64)
             pixel_label_sample = bpnet_pixel_label[0,py,px,:]

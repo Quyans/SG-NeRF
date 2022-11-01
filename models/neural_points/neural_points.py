@@ -769,21 +769,28 @@ class NeuralPoints(nn.Module):
         # print("actual_numpoints_tensor", actual_numpoints_tensor.shape)
         # sample_pidx_tensor: B, R, SR, K
         ray_dirs_tensor = inputs["raydir"]
-        ray_label_tensor = pixel_label_tensor.reshape(-1,1)[None,...]
-        # (1,784,3)-784个采样点
-        # print("ray_dirs_tensor", ray_dirs_tensor.shape, self.xyz.shape)
-        #sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
-        #sample_loc_tensor->self.w2pers(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor) sample_loc_w_tensor转了坐标系
-        #sample_loc_w_tensor[1,784,24,3],init:all-0，存某个pixel需要query的点的坐标
-        #sample_ray_dirs_tensor[1,784,24,3]方向？
-        #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
-        #vsize_np[0.008 0.008 0.008]
-        #ranges_np[-1.6265 -1.9573 -3.2914 3.868 4.070 2.417]
 
-        # 这里需要改！！！！！
-        sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor,sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = \
-            self.querier.query_points(pixel_idx_tensor,pixel_label_tensor, point_xyz_pers_tensor, self.xyz[None,...],self.points_label[None,...],self.points_label_prob[None,...], actual_numpoints_tensor, h, w, \
-                intrinsic, near_plane, far_plane, ray_dirs_tensor,ray_label_tensor, cam_pos_tensor, cam_rot_tensor)
+        if self.opt.predict_semantic==1:
+             # (1,784,3)-784个采样点
+            # print("ray_dirs_tensor", ray_dirs_tensor.shape, self.xyz.shape)
+            #sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
+            #sample_loc_tensor->self.w2pers(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor) sample_loc_w_tensor转了坐标系
+            #sample_loc_w_tensor[1,784,24,3],init:all-0，存某个pixel需要query的点的坐标
+            #sample_ray_dirs_tensor[1,784,24,3]方向？
+            #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
+            #vsize_np[0.008 0.008 0.008]
+            #ranges_np[-1.6265 -1.9573 -3.2914 3.868 4.070 2.417]
+            ray_label_tensor = pixel_label_tensor.reshape(-1,1)[None,...]
+            sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor,sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = \
+                self.querier.query_points(pixel_idx_tensor, point_xyz_pers_tensor, self.xyz[None,...], actual_numpoints_tensor, h, w, \
+                    intrinsic, near_plane, far_plane, ray_dirs_tensor, cam_pos_tensor, cam_rot_tensor,pixel_label_tensor=pixel_label_tensor,points_label_tensor=self.points_label[None,...],points_label_prob_tensor=self.points_label_prob[None,...],ray_label_tensor=ray_label_tensor)  
+
+                    # ,pixel_label_tensor=None,points_label_tensor=None,points_label_prob_tensor=None
+        else:
+            sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor,sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = \
+                self.querier.query_points(pixel_idx_tensor, point_xyz_pers_tensor, self.xyz[None,...], actual_numpoints_tensor, h, w, \
+                    intrinsic, near_plane, far_plane, ray_dirs_tensor, cam_pos_tensor, cam_rot_tensor)
+        
         # sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor,sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = \
         #     self.querier.query_points(pixel_idx_tensor,pixel_label_tensor, point_xyz_pers_tensor, self.xyz[None,...],self.points_label[None,...], actual_numpoints_tensor, h, w, \
         #         intrinsic, near_plane, far_plane, ray_dirs_tensor,ray_label_tensor, cam_pos_tensor, cam_rot_tensor)
@@ -985,7 +992,7 @@ class NeuralPoints(nn.Module):
     def forward(self, inputs):
 
         pixel_idx, camrotc2w, campos, near_plane, far_plane, h, w, intrinsic,pixel_label = inputs["pixel_idx"].to(torch.int32), inputs["camrotc2w"], inputs["campos"], inputs["near"], inputs["far"], inputs["h"], inputs["w"], inputs["intrinsic"],inputs["pixel_label"]
- 
+        
         # 1, 294, 24, 32;   1, 294, 24;     1, 291, 2
         # sample_pidx_tensor[1,784,24,8]每个像素(784)，需要采样的每个query点(24)的点云中临近8点
         # sample_loc_tensor[1,784,24,3]存某个pixel需要query的点的坐标，换坐标系了，应该从世界坐标系转到了pers（相机坐标系？）
@@ -1009,7 +1016,9 @@ class NeuralPoints(nn.Module):
         # [1,784,24,8,1]基本上全是1
         sampled_Rw2c = self.Rw2c if self.Rw2c.dim() == 2 else torch.index_select(self.Rw2c, 0, sample_pidx).view(B, R, SR, K, self.Rw2c.shape[1], self.Rw2c.shape[2])
 
-        sampled_label = None if self.points_label[None,...] is None else torch.index_select(self.points_label[None,...], 1, sample_pidx).view(B, R, SR, K, self.points_label[None,...].shape[2])
+        sampled_label=None
+        if self.opt.semantic_guidance==1:
+            sampled_label = None if self.points_label[None,...] is None else torch.index_select(self.points_label[None,...], 1, sample_pidx).view(B, R, SR, K, self.points_label[None,...].shape[2])
 
 
 
