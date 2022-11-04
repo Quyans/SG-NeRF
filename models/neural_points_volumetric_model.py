@@ -228,6 +228,9 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
 
             print(self.opt == opt)
             bpnet = BPNet(opt)
+
+            print(bpnet)
+
             # =2的时候是load checkpoints 
             if opt.bpnetweight and opt.load_mode!=2:
                 logger.info("=> loading bpnet weight '{}'".format(opt.bpnetweight))
@@ -374,19 +377,21 @@ class NeuralPointsRayMarching(nn.Module):
             py = pixel_idx[...,1].type(torch.int64)
             pixel_label_sample = bpnet_pixel_label[0,py,px,:]
             self.neural_points.set_bpnet_feats(bpnet_points_label_prob,bpnet_points_label,bpnet_points_embedding)
-            sampled_color, sampled_label,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w,sample_ray_dirs, ray_mask_tensor, vsize, grid_vox_sz \
+            sampled_color, sampled_label_embedding,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w,sample_ray_dirs, ray_mask_tensor, vsize, grid_vox_sz \
                 = self.neural_points({"pixel_idx": pixel_idx, "camrotc2w": camrotc2w, "campos": campos, "near": near, "far": far,"focal": focal, "h": h, "w": w, "intrinsic": intrinsic,"gt_image":gt_image, "raydir":raydir,"pixel_label":pixel_label_sample})
         else:
-            sampled_color, sampled_label,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w,sample_ray_dirs, ray_mask_tensor, vsize, grid_vox_sz \
+            sampled_color, sampled_label_embedding,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w,sample_ray_dirs, ray_mask_tensor, vsize, grid_vox_sz \
                 = self.neural_points({"pixel_idx": pixel_idx, "camrotc2w": camrotc2w, "campos": campos, "near": near, "far": far,"focal": focal, "h": h, "w": w, "intrinsic": intrinsic,"gt_image":gt_image, "raydir":raydir,"pixel_label":None})
         # B, channel, 292, 24, 32 ;      B, 3, 294, 24, 32;     B, 294, 24;     B, 291, 2
         # sampled_color[1,784,24,8,3]原始点云input的颜色;
+        # sampled_label_embedding [1,784,40,8,96] bpnet预测的点云的label
         # sampled_Rw2c[3,3]-ones(3);
         # sampled_dir[1,784,24,8,3];
         # sampled_conf[1,784,24,8,1]；
         # sampled_embedding[1,784,24,8,32];feature
         # sampled_xyz_pers[1,784,24,8,3];两个坐标系
         # sampled_xyz[1,784,24,8,3];两个坐标系
+        
         # sample_pnt_mask[1,784,24,8];
         # sample_loc[1,784,24,3];两个坐标系，query坐标
         # sample_loc_w[1,784,24,3];两个坐标系，query坐标
@@ -399,7 +404,7 @@ class NeuralPointsRayMarching(nn.Module):
         #ray_valid[1,784,24]
         #weight[1,784,24,8]
         #conf_coefficient[1,784,24,8] all is 1
-        decoded_features, ray_valid, weight, conf_coefficient = self.aggregator(sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, grid_vox_sz)
+        decoded_features, ray_valid, weight, conf_coefficient = self.aggregator(sampled_color,sampled_label_embedding, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, grid_vox_sz)
         ray_dist = torch.cummax(sample_loc[..., 2], dim=-1)[0]#[1,784,24]
         ray_dist = torch.cat([ray_dist[..., 1:] - ray_dist[..., :-1], torch.full((ray_dist.shape[0], ray_dist.shape[1], 1), vsize[2], device=ray_dist.device)], dim=-1)
 

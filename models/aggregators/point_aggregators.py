@@ -243,7 +243,7 @@ class PointAggregator(torch.nn.Module):
                             help='BPNet arch_3d')     
         parser.add_argument('--bpnetweight',
                             type=str,
-                            default="/home/vr717/Documents/qys/code/NSEPN/BPNet_qys/Data/ScanNet24102/initmodel/bpnet_5cm.pth.tar",
+                            default="/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/checkpoints/bpnetInitmodel/bpnet_5cm.pth.tar",
                             help='bpnet pretrained model weight'
         )
 
@@ -353,7 +353,7 @@ class PointAggregator(torch.nn.Module):
             self.block3 = self.passfunc
         #layer4:rotatation careless
         if opt.shading_feature_mlp_layer4 > 0:
-            in_channels = in_channels + 6*opt.num_feat_freqs+ (3 if "1" in list(opt.point_color_mode) else 0)
+            in_channels = in_channels + 6*opt.num_feat_freqs+ (3 if "1" in list(opt.point_color_mode) else 0) + (96 if opt.predict_semantic==1 else 0)
             out_channels = opt.shading_feature_num
             block4 = []
             for i in range(opt.shading_feature_mlp_layer4):
@@ -541,7 +541,7 @@ class PointAggregator(torch.nn.Module):
         return weights, embedding[..., 7:]
 
 
-    def viewmlp(self, sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight, pnt_mask_flat, pts, viewdirs, total_len, ray_valid, in_shape, dists):
+    def viewmlp(self, sampled_color,sampled_label_embedding, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight, pnt_mask_flat, pts, viewdirs, total_len, ray_valid, in_shape, dists):
         # print("sampled_Rw2c", sampled_Rw2c.shape, sampled_xyz.shape)
         # assert sampled_Rw2c.dim() == 2
         B, R, SR, K, _ = dists.shape#B 1 R:784 K:8 SR:24
@@ -664,7 +664,13 @@ class PointAggregator(torch.nn.Module):
                 row_theta_fai_feat = torch.cat([row[...,None],theta[...,None],fai[...,None]], dim=-1)#18
                 row_theta_fai_feat = positional_encoding(row_theta_fai_feat,self.opt.num_feat_freqs)#18
                 feat = torch.cat([feat, row_theta_fai_feat],dim= -1)
-            feat = self.block4(feat)  # [35634,256+18]
+            if sampled_label_embedding is not None:
+                sampled_label_embedding = sampled_label_embedding.view(-1, sampled_label_embedding.shape[-1])
+                if self.opt.apply_pnt_mask > 0:
+                    sampled_label_embedding = sampled_label_embedding[pnt_mask_flat, :]
+                feat = torch.cat([feat, sampled_label_embedding], dim=-1)  # [35634,256+3]
+            
+            feat = self.block4(feat)  # [35634,256+18+96]
 
 
         if self.opt.agg_intrp_order == 1:#False
@@ -820,7 +826,7 @@ class PointAggregator(torch.nn.Module):
         return sampled_conf - diff.detach()
 
 
-    def forward(self, sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, grid_vox_sz):
+    def forward(self, sampled_color,sampled_label_embedding,  sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, grid_vox_sz):
         # return B * R * SR * channel
         '''
         sampled_color [1,784,24,8,3]
@@ -907,7 +913,7 @@ class PointAggregator(torch.nn.Module):
         if sampled_conf is not None:#True
             conf_coefficient = self.gradiant_clamp(sampled_conf[..., 0], min=0.0001, max=1)#[1,784,24,8],all are 1
         #put data into nerual network at this line
-        output, _ = getattr(self, self.which_agg_model, None)(sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight * conf_coefficient, pnt_mask_flat, pts, viewdirs, total_len, ray_valid, in_shape, dists)
+        output, _ = getattr(self, self.which_agg_model, None)(sampled_color,sampled_label_embedding, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight * conf_coefficient, pnt_mask_flat, pts, viewdirs, total_len, ray_valid, in_shape, dists)
         #output[18816,4]
         if (self.opt.sparse_loss_weight <=0) and ("conf_coefficient" not in self.opt.zero_one_loss_items) and self.opt.prob == 0:#False
             weight, conf_coefficient = None, None

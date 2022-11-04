@@ -663,7 +663,8 @@ def main():
             model.eval()
             print("fuck!!!")
             if load_points in [1,3]:#True,load point = 1
-                points_xyz_all,points_feats_all,points_label_all = train_dataset.load_init_points()
+                # points_xyz_all,points_feats_all,points_label_all = train_dataset.load_init_points()
+                points_xyz_all,points_feats_all = train_dataset.load_init_points()
             if load_points == 2:#False
                 points_xyz_all = train_dataset.load_init_depth_points(device="cuda", vox_res=100)
             if load_points == 3:#False
@@ -695,19 +696,19 @@ def main():
                     dim=-1) > 0
                 points_xyz_all = points_xyz_all[mask]
                 points_feats_all = points_feats_all[mask]
-                points_label_all = points_label_all[mask]
+                # points_label_all = points_label_all[mask]
 
             if opt.vox_res > 0:
                 points_xyz_all = [points_xyz_all] if not isinstance(points_xyz_all, list) else points_xyz_all
                 points_feats_all = [points_feats_all] if not isinstance(points_feats_all, list) else points_feats_all
-                points_label_all = [points_label_all] if not isinstance(points_label_all, list) else points_label_all
+                # points_label_all = [points_label_all] if not isinstance(points_label_all, list) else points_label_all
                 points_xyz_holder = torch.zeros([0,3], dtype=points_xyz_all[0].dtype, device="cuda")
                 points_feats_holder = torch.zeros([0,3], dtype=points_feats_all[0].dtype, device="cuda")
-                points_label_holder = torch.zeros([0,1], dtype=points_label_all[0].dtype, device="cuda")
+                # points_label_holder = torch.zeros([0,1], dtype=points_label_all[0].dtype, device="cuda")
                 for i in range(len(points_xyz_all)):#一次遍历的是一张图片里
                     points_xyz = points_xyz_all[i]
                     points_feats = points_feats_all[i]
-                    points_label = points_label_all[i]
+                    # points_label = points_label_all[i]
 
                     vox_res = opt.vox_res // (1.5**i)
                     print("load points_xyz", points_xyz.shape)
@@ -715,15 +716,15 @@ def main():
                     points_xyz = points_xyz[sampled_pnt_idx, :]
 
                     points_feats = points_feats[sampled_pnt_idx,:]
-                    points_label = points_label[sampled_pnt_idx, :]
+                    # points_label = points_label[sampled_pnt_idx, :]
                     print("after voxelize:", points_xyz.shape)
 
                     points_xyz_holder = torch.cat([points_xyz_holder, points_xyz], dim=0)
                     points_feats_holder = torch.cat([points_feats_holder,points_feats], dim=0)
-                    points_label_holder = torch.cat([points_label_holder,points_label], dim=0)
+                    # points_label_holder = torch.cat([points_label_holder,points_label], dim=0)
                 points_xyz_all = points_xyz_holder
                 points_feats_all = points_feats_holder
-                points_label_all = points_label_holder
+                # points_label_all = points_label_holder
 
             # if opt.resample_pnts > 0:#False
             #     if opt.resample_pnts == 1:
@@ -739,7 +740,7 @@ def main():
             print("unique_cam_ind", unique_cam_ind.shape)
             points_xyz_all = [points_xyz_all[cam_ind[:,0]==unique_cam_ind[i], :] for i in range(len(unique_cam_ind))]#按照camera list 分开points_xyz_all
             points_feats_all = [points_feats_all[cam_ind[:,0]==unique_cam_ind[i], :] for i in range(len(unique_cam_ind))]
-            points_label_all = [points_label_all[cam_ind[:,0]==unique_cam_ind[i], :] for i in range(len(unique_cam_ind))]
+            # points_label_all = [points_label_all[cam_ind[:,0]==unique_cam_ind[i], :] for i in range(len(unique_cam_ind))]
             featuredim = opt.point_features_dim
             points_embedding_all = torch.zeros([1, 0, featuredim], device=unique_cam_ind.device, dtype=torch.float32)
             points_color_all = torch.zeros([1, 0, 3], device=unique_cam_ind.device, dtype=torch.float32)
@@ -755,7 +756,7 @@ def main():
                 w2c = torch.inverse(c2w)
                 intrinsic = batch["intrinsic"].cuda()
                 cam_xyz_all = (torch.cat([points_xyz_all[i], torch.ones_like(points_xyz_all[i][...,-1:])], dim=-1) @ w2c.transpose(0,1))[..., :3]
-                cam_label_all = points_label_all[i]
+                # cam_label_all = points_label_all[i]
                 # embedding->图像卷积后的feature，点采样，过个mlp得到的
                 embedding, color, dir, conf = model.query_embedding(HDWD, cam_xyz_all[None,...], None, batch['full_image'].cuda(), c2w[None, None,...], w2c[None, None,...], intrinsic[:, None,...], 0, pointdir_w=True)
                 conf = conf * opt.default_conf if opt.default_conf > 0 and opt.default_conf < 1.0 else conf
@@ -766,7 +767,7 @@ def main():
                 # visualizer.save_neural_points(id, cam_xyz_all, color, batch, save_ref=True)
             points_xyz_all=torch.cat(points_xyz_all, dim=0)
             points_feats_all = torch.cat(points_feats_all,dim=0)
-            points_label_all = torch.cat(points_label_all,dim=0)
+            # points_label_all = torch.cat(points_label_all,dim=0)
             # visualizer.save_neural_points("init", points_xyz_all, points_label_all, None, save_ref=load_points == 0)
             visualizer.save_neural_points("init", points_xyz_all, points_feats_all, None, save_ref=load_points == 0)
             # print("vis")
@@ -982,12 +983,6 @@ def main():
                     xyz_world_sect_plane = mvs_utils.gen_bg_points(model.input)
                     bg_ray, fg_masks = model.set_bg(xyz_world_sect_plane, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, fg_masks=fg_masks)
                 data["bg_ray"] = bg_ray
-
-            
-
-
-            # torch.cuda.set_device(0)
-            # model.net_ray_marching.cuda()
 
             model.optimize_parameters(total_steps=total_steps) #
             losses = model.get_current_losses()#{'total': tensor(0.0206, device='cuda:0', grad_fn=<AddBackward0>), 'ray_masked_coarse_raycolor': tensor(0.0213, device='cuda:0', grad_fn=<MseLossBackward>), 'ray_miss_coarse_raycolor': tensor(0., device='cuda:0'), 'coarse_raycolor': tensor(0.0213, device='cuda:0', grad_fn=<MseLossBackward>), 'conf_coefficient': tensor(-6.9088, device='cuda:0', grad_fn=<MeanBackward0>)}

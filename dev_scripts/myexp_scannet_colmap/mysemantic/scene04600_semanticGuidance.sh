@@ -1,17 +1,15 @@
 #!/bin/bash
 
-semantic_guidance=1
-# predict_semantic=0
+
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
 # name='scene024102_Semantic_step50_debug2'
-name="scene024102_Semantic_640480step5_feats2one_withsemanticEmbedding_repair_sample"
-
+name='scene046_00_Semantic_640480step5_feats2one_withsemanticEmbedding_repair_sample'
 
 resume_iter=best #latest
 
-data_root="${nrDataRoot}/scannet/scans/"
-scan="scene0241_02"
+data_root="${nrDataRoot}/scannet/scans/scene046"
+scan="scene0046_00"
 
 img_wh="640 480"
 

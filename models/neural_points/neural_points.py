@@ -663,7 +663,7 @@ class NeuralPoints(nn.Module):
         self.points_label_prob = points_label_prob
         self.points_label = points_label[...,None]    #[122598,1]
         if bpnet_points_embedding is not None:
-            self.bpnet_points_embedding = bpnet_points_embedding
+            self.bpnet_points_embedding = bpnet_points_embedding[None,...]
 
     def editing_set_points(self, points_xyz, points_embeding, points_color=None, points_dir=None, points_conf=None,
                    parameter=False, Rw2c=None, eulers=None):
@@ -778,7 +778,7 @@ class NeuralPoints(nn.Module):
             #sample_loc_w_tensor[1,784,24,3],init:all-0，存某个pixel需要query的点的坐标
             #sample_ray_dirs_tensor[1,784,24,3]方向？
             #ray_mask_tensor[1,784]true or false，存放不需要采集的像素的msk
-            #vsize_np[0.008 0.008 0.008]
+            #vsize_np[0.008 0.008 0.008]``
             #ranges_np[-1.6265 -1.9573 -3.2914 3.868 4.070 2.417]
             ray_label_tensor = pixel_label_tensor.reshape(-1,1)[None,...]
             sample_pidx_tensor, sample_loc_tensor, sample_loc_w_tensor,sample_ray_dirs_tensor, ray_mask_tensor, vsize, ranges = \
@@ -1016,9 +1016,11 @@ class NeuralPoints(nn.Module):
         # [1,784,24,8,1]基本上全是1
         sampled_Rw2c = self.Rw2c if self.Rw2c.dim() == 2 else torch.index_select(self.Rw2c, 0, sample_pidx).view(B, R, SR, K, self.Rw2c.shape[1], self.Rw2c.shape[2])
 
-        sampled_label=None
+        # sampled_label=None
+        sampled_label_embedding = None
         if self.opt.semantic_guidance==1:
-            sampled_label = None if self.points_label[None,...] is None else torch.index_select(self.points_label[None,...], 1, sample_pidx).view(B, R, SR, K, self.points_label[None,...].shape[2])
+            bpnet_points_embedding = torch.index_select(self.bpnet_points_embedding, 1, sample_pidx).view(B, R, SR, K, self.bpnet_points_embedding.shape[2])
+            # sampled_label = None if self.points_label[None,...] is None else torch.index_select(self.points_label[None,...], 1, sample_pidx).view(B, R, SR, K, self.points_label[None,...].shape[2])
 
 
 
@@ -1035,4 +1037,4 @@ class NeuralPoints(nn.Module):
         # if self.points_embeding.grad is not None:
         #     print("points_embeding grad:", self.points_embeding.requires_grad, torch.max(self.points_embeding.grad))
         # print("points_embeding 3", torch.max(self.points_embeding), torch.min(self.points_embeding))
-        return sampled_color,sampled_label,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding[..., 6:], sampled_embedding[..., 3:6], sampled_embedding[..., :3], sample_pnt_mask, sample_loc, sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize, self.grid_vox_sz
+        return sampled_color,bpnet_points_embedding,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding[..., 6:], sampled_embedding[..., 3:6], sampled_embedding[..., :3], sample_pnt_mask, sample_loc, sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize, self.grid_vox_sz

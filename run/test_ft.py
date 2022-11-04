@@ -160,7 +160,11 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, l
 
         # data.pop('gt_image', None)
         data.pop('gt_mask', None)
-
+        save_label_switch = False  #是否存预测的label
+        data["train_steps"]=i
+        if opt.save_predict_label > 0 and i % opt.save_label_iter == 0:
+            save_label_switch = True
+        data["save_label_switch"]=save_label_switch
         visuals = None
         stime = time.time()
         ray_masks = []
@@ -316,6 +320,7 @@ def main():
         opt.resume_dir=resume_dir
         opt.resume_iter = resume_iter
         opt.is_train=True
+        opt.load_mode=2
 
     model = create_model(opt)
     model.setup(opt, train_len=len(train_dataset))

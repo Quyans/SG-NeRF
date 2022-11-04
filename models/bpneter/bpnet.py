@@ -116,11 +116,13 @@ class BPNet(nn.Module):
         
         # self.VIEW_NUM = 3 todo设置可变的
         # self.IMG_DIM = (320, 240)
+
+        # 原本 use_augmentation = true
         self.IMG_DIM = cfg.img_wh
         self.voxelizer = Voxelizer(
             voxel_size=voxelSize,
             clip_bound=None,
-            use_augmentation=True,
+            use_augmentation=False,
             scale_augmentation_bound=self.SCALE_AUGMENTATION_BOUND,
             rotation_augmentation_bound=self.ROTATION_AUGMENTATION_BOUND,
             translation_augmentation_ratio_bound=self.TRANSLATION_AUGMENTATION_RATIO_BOUND)
@@ -192,6 +194,7 @@ class BPNet(nn.Module):
         self.linker_p4 = Linking(256, net3d.PLANES[4], viewNum=self.viewNum)
         self.linker_p5 = Linking(512, net3d.PLANES[3], viewNum=self.viewNum)
 
+
     def forward(self, sparse_3d, images, links):
         """
         images:BCHWV               
@@ -220,8 +223,10 @@ class BPNet(nn.Module):
         V_B, C, H, W = x5.shape
         links_current_level = links.clone()
         links_current_level[:, 1:3, :] = ((H - 1.) / (h - 1.) * links_current_level[:, 1:3, :].float()).int()
+        # 这里有个随机性 在linker这里，out_b4p16不会变 x5不变 links_current_level会变
         fused_3d_p5, fused_2d_p5 = self.linker_p5(x5, out_b4p16, links_current_level, init_3d_data=sparse_3d)
 
+        
         p4 = self.up4_2d(F.interpolate(fused_2d_p5, x4.shape[-2:], mode='bilinear', align_corners=True))
         p4 = torch.cat([p4, x4], dim=1)
         p4 = self.delayer4_2d(p4)
@@ -343,7 +348,11 @@ class BPNet(nn.Module):
         for v in range(self.viewNum):
 
             # 这里三个f都是同一个文件
-            image_pa = image_path[0]
+            if isinstance(image_path,list):
+                image_pa = image_path[0]
+            else:
+                image_pa = image_path
+            
             
             if tuple([image_pa,]) in frames_path[v * partial:v * partial + partial]:
                 imgio = imageio.imread(image_pa)

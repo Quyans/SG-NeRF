@@ -82,7 +82,7 @@ class Linking(nn.Module):
             f = feat_2d_all[v, current_links[:, 0, v], :, current_links[:, 1, v], current_links[:, 2, v]]
             f *= current_links[:, 3, v].unsqueeze(dim=1).float()
             feat_2d_to_3d[:, v * self.fea2d_dim:(v + 1) * self.fea2d_dim] = f
-            test = current_links[:, 0, v].data.cpu().numpy()
+            # test = current_links[:, 0, v].data.cpu().numpy()
             feat_3d_to_2d[v, current_links[:, 0, v], :, current_links[:, 1, v], current_links[:, 2, v]] = feat_3d_for_2d
 
         feat_3d_to_2d = feat_3d_to_2d.view(V_B, C, H, W)

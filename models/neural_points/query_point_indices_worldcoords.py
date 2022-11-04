@@ -550,7 +550,8 @@ class lighting_fast_querier():
 
                                             //if((center_label==label_v||label_v==0||center_label==0 || ((center_label!=label_v)&&(seconds%2==0))))
 
-                                            if((center_label==label_v||label_v==0||center_label==0 || ((center_label!=label_v)&&(seconds%10<=label_prob))))
+                                            if((center_label==label_v||label_v==0||center_label==0 || ((center_label!=label_v)&&(seconds%10<=(1-label_prob)))))
+                                            //if((center_label==label_v||label_v==0||center_label==0 || ((center_label!=label_v)&&(seconds%10<=label_prob))))
                                             //if((center_label==label_v||label_v==0||center_label==0))
                                             {
                                                 float x_v = (in_data[pidx*3]-centerx);//in_data[pidx*3]：点云坐标；centerx:query点的坐标

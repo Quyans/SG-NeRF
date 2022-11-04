@@ -314,9 +314,10 @@ class ScannetFtDataset(BaseDataset):
                 self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
                 self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
             else:  # nsvf configuration
-                step=50#5
+                step=5#5
                 self.train_id_list = self.all_id_list[::step]
-                self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+                # self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+                self.test_id_list = [0,300,400]
         else:
             #assert self.split == "test", 'split==train! error!cant train at new camera trajectory'
             print("Novel camera trajectory rendering")
@@ -404,9 +405,9 @@ class ScannetFtDataset(BaseDataset):
         # parse semantic mesh
         points_semantic_path = os.path.join(self.data_dir, self.scan, "exported/pcd_semantic.ply")
         mesh_semantic_path = os.path.join(self.data_dir, self.scan, self.scan + "_vh_clean_2.labels.ply")
-        ply_sem_data = PlyData.read(mesh_semantic_path)
-
-        print("ply_sem_data 0", ply_sem_data.elements[0], ply_sem_data.elements[0].data["label"].dtype)
+        # print("语义：",mesh_semantic_path)
+        # ply_sem_data = PlyData.read(mesh_semantic_path)
+        # print("ply_sem_data 0", ply_sem_data.elements[0], ply_sem_data.elements[0].data["label"].dtype)
 
         vertices = np.empty(len( plydata.elements[0].data["blue"]), dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1'),('label', 'u1')])
         vertices['x'] = plydata.elements[0].data["x"].astype('f4')
@@ -415,7 +416,7 @@ class ScannetFtDataset(BaseDataset):
         vertices['red'] = plydata.elements[0].data["red"].astype('u1')
         vertices['green'] = plydata.elements[0].data["green"].astype('u1')
         vertices['blue'] = plydata.elements[0].data["blue"].astype('u1')
-        vertices['label']=ply_sem_data.elements[0].data["label"].astype('u1')
+        # vertices['label']=ply_sem_data.elements[0].data["label"].astype('u1')
         # save as ply
         ply = PlyData([PlyElement.describe(vertices, 'vertex')], text=False)
         ply.write(points_path)
@@ -434,7 +435,7 @@ class ScannetFtDataset(BaseDataset):
         # plydata (PlyProperty('x', 'double'), PlyProperty('y', 'double'), PlyProperty('z', 'double'), PlyProperty('nx', 'double'), PlyProperty('ny', 'double'), PlyProperty('nz', 'double'), PlyProperty('red', 'uchar'), PlyProperty('green', 'uchar'), PlyProperty('blue', 'uchar'))
         x,y,z=torch.as_tensor(plydata.elements[0].data["x"].astype(np.float32), device=device, dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["y"].astype(np.float32), device=device, dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["z"].astype(np.float32), device=device, dtype=torch.float32)
         points_xyz = torch.stack([x,y,z], dim=-1)
-        points_label = torch.as_tensor(plydata.elements[0].data["label"].astype(np.uint8)[...,None], device=device, dtype=torch.uint8)
+        # points_label = torch.as_tensor(plydata.elements[0].data["label"].astype(np.uint8)[...,None], device=device, dtype=torch.uint8)
         checkpoints_path =  os.path.join(self.data_dir, self.scan, "exported/points.pth")
         pth_data = torch.load(checkpoints_path)
 
@@ -445,12 +446,13 @@ class ScannetFtDataset(BaseDataset):
             ranges = torch.as_tensor(self.opt.ranges, device=points_xyz.device, dtype=torch.float32)
             mask = torch.prod(torch.logical_and(points_xyz >= ranges[None, :3], points_xyz <= ranges[None, 3:]), dim=-1) > 0
             points_xyz = points_xyz[mask]
-            points_label = points_label[mask]
+            # points_label = points_label[mask]
             points_feats = points_feats[mask]
             points_loc = points_loc[mask]
         # np.savetxt(os.path.join(self.data_dir, self.scan, "exported/pcd.txt"), points_xyz.cpu().numpy(), delimiter=";")
 
-        return points_xyz,points_feats, points_label
+        # return points_xyz,points_feats, points_label
+        return points_xyz,points_feats
 
     def read_depth(self, filepath):
         depth_im = cv2.imread(filepath, -1).astype(np.float32)
