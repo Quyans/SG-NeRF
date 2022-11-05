@@ -5,7 +5,7 @@ semantic_guidance=1
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
 # name='scene024102_Semantic_step50_debug2'
-name='scene024102_Semantic_step5_debug_640480step5_feats2one'
+name='scene024102_Semantic_640480step5_feats2one_withsemanticEmbedding_repair_sample'
 
 resume_iter=best #latest
 
@@ -13,11 +13,11 @@ data_root="${nrDataRoot}/scannet/scans/"
 scan="scene0241_02"
 
 
-semantic_guidance=0
+semantic_guidance=1
 layers_2d=34
 arch_3d=MinkUNet18A
 classes=20
-predict_semantic=0
+predict_semantic=1
 
 
 load_points=1
@@ -138,7 +138,7 @@ train_and_test=0 #1
 test_num=25
 test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=100
-test_num_step=50
+test_num_step=1
 
 prob_freq=1000000 #10001
 prob_num_step=1000000
