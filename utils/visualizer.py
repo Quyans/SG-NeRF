@@ -89,7 +89,7 @@ class Visualizer:
             img_arry = self.read_image(img_filepath, dtype=np.float32)
             img_lst.append(img_arry)
         stacked_imgs = [to8b(img_arry) for img_arry in img_lst]
-        filename = 'video_{:04d}_{}.mov'.format(total_step, name)
+        filename = 'video_{:04d}_{}.mov'.format(int(total_step), name)
         imageio.mimwrite(os.path.join(self.vid_dir, filename), stacked_imgs, fps=20, quality=10)
         filename = 'video_{:04d}_{}.gif'.format(total_step, name)
         imageio.mimwrite(os.path.join(self.vid_dir, filename), stacked_imgs, fps=5, format='GIF')
