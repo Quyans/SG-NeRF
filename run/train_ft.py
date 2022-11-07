@@ -966,12 +966,13 @@ def main():
                         'nothing to probe, max ray miss is only {}'.format(model.top_ray_miss_loss[0]))
             total_steps += 1
 
-            save_label_switch = False  #是否存预测的label
+            # save_label_switch = False  #是否存预测的label
             # save_label_switch = True
-            data["train_steps"]=total_steps
+            # data["train_steps"]=total_steps
             if opt.save_predict_label > 0 and total_steps % opt.save_label_iter == 0:
-                save_label_switch = True
-            data["save_label_switch"]=save_label_switch
+                # save_label_switch = True
+                model.saveSemanticPoints(total_steps)
+            # data["save_label_switch"]=save_label_switch
             model.set_input(data)
             
             if opt.bgmodel.endswith("plane"):#False

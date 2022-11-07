@@ -126,9 +126,7 @@ def render_vid(model, dataset, visualizer, opt, bg_info, steps=0, gen_vid=True):
         del dataset
         visualizer.gen_video("coarse_raycolor", range(0, total_num), 0)
         print('--------------------------------Finish generating vid--------------------------------')
-
     return
-
 
 
 def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, lpips=True):
@@ -160,11 +158,9 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, l
 
         # data.pop('gt_image', None)
         data.pop('gt_mask', None)
-        save_label_switch = False  #是否存预测的label
-        data["train_steps"]=i
-        if opt.save_predict_label > 0 and i % opt.save_label_iter == 0:
-            save_label_switch = True
-        data["save_label_switch"]=save_label_switch
+        # save_label_switch = False  #是否存预测的label
+        # data["train_steps"]=i
+        # data["save_label_switch"]=save_label_switch
         visuals = None
         stime = time.time()
         ray_masks = []
@@ -208,6 +204,10 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, l
                 ray_masks.append(model.output["ray_mask"] > 0)
         if len(ray_masks) > 0:
             ray_masks = torch.cat(ray_masks, dim=1)
+
+        if opt.save_predict_label > 0 and i % opt.save_label_iter == 0:
+            model.saveSemanticPoints_test(total_num,i)
+
         gt_image = torch.zeros((height*width, 3), dtype=torch.float32)
         gt_image[edge_mask, :] = tmpgts['gt_image'].clone()
         if 'gt_image' in model.visual_names and opt.novel_cam_trajectory!="1":

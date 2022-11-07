@@ -288,7 +288,6 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
             if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 2 == 1:
                 self.neural_point_optimizer.step()
 
-
     def optimize_parameters(self, backward=True, total_steps=0):
         self.forward()
         self.update_rank_ray_miss(total_steps)
@@ -296,6 +295,24 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
 
     def update_rank_ray_miss(self, total_steps):
         raise NotImplementedError
+
+    def saveSemanticPoints(self,train_steps):
+        if self.opt.gpu_ids:
+            self.net_ray_marching.module.saveSemanticPoints(train_steps)
+        else:
+            self.net_ray_marching.module.saveSemanticPoints(train_steps)
+
+    def saveSemanticPoints_test(self,testIter,imgNum):
+        if self.opt.gpu_ids:
+            self.net_ray_marching.module.saveSemanticPoints_test(testIter,imgNum)
+        else:
+            self.net_ray_marching.saveSemanticPoints_test(testIter,imgNum)
+    
+
+# 用来存放需要save的东西
+class PredictDict:
+    tem = {}
+
 class NeuralPointsRayMarching(nn.Module):
     def __init__(self,
              tonemap_func=None,
@@ -325,8 +342,8 @@ class NeuralPointsRayMarching(nn.Module):
         self.return_color = True
         self.opt = opt
         self.neural_points = neural_points
-
-
+        self.predictDict = PredictDict()
+        
     def forward(self,
                 campos,
                 raydir,
@@ -347,29 +364,35 @@ class NeuralPointsRayMarching(nn.Module):
                 save_label_switch=False,
                 train_steps=None,
                 **kargs):
+
         output = {}
 
         if self.opt.predict_semantic:
             # 提前做bpnet的方法
             locs_in,feats_in = self.neural_points.getPointsData()
             bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in,train_id_paths,image_path)
-            if save_label_switch:
-                savedata = np.concatenate((locs_in,bpnet_points_label[...,None].cpu().numpy()),axis=-1)
-                predict_label = bpnet_points_label[...,None].cpu().numpy()
-                # print(a)
-                # np.savetxt(os.path.join(self.opt.resume_dir,"predict_label_{}.txt".format(train_steps)),savedata,fmt="%f")
 
-                savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name)
+            self.predictDict.bpnet_points_label = bpnet_points_label
+            self.predictDict.locs_in = locs_in
 
-                np.savetxt(os.path.join(savePath,"predict_label_{}.txt".format(train_steps)),predict_label,fmt="%f")
-                print("savetxt",savePath,"predict_label_{}.txt".format(train_steps))
-                # save_label = predict_label
-                pred_colors = []
-                for ind in range(len(predict_label)):
-                    pred_colors.append(colordict[predict_label[ind][0]])
-                save_matrix =  torch.cat((torch.Tensor(locs_in[:,0:3]),torch.Tensor(pred_colors)),dim=1)
-                np.savetxt(os.path.join(savePath,"predict_points_{}.txt".format(train_steps)),save_matrix,fmt="%f")
-                print("savepoints:",os.path.join(savePath,"predict_points_{}.txt".format(train_steps)))
+            # if save_label_switch:
+            #     savedata = np.concatenate((locs_in,bpnet_points_label[...,None].cpu().numpy()),axis=-1)
+            #     predict_label = bpnet_points_label[...,None].cpu().numpy()
+            #     # print(a)
+            #     # np.savetxt(os.path.join(self.opt.resume_dir,"predict_label_{}.txt".format(train_steps)),savedata,fmt="%f")
+
+            #     savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name)
+
+            #     np.savetxt(os.path.join(savePath,"predict_label_{}.txt".format(train_steps)),predict_label,fmt="%f")
+            #     print("savetxt",savePath,"predict_label_{}.txt".format(train_steps))
+            #     # save_label = predict_label
+            #     pred_colors = []
+            #     for ind in range(len(predict_label)):
+            #         pred_colors.append(colordict[predict_label[ind][0]])
+            #     save_matrix =  torch.cat((torch.Tensor(locs_in[:,0:3]),torch.Tensor(pred_colors)),dim=1)
+            #     np.savetxt(os.path.join(savePath,"predict_points_{}.txt".format(train_steps)),save_matrix,fmt="%f")
+            #     print("savepoints:",os.path.join(savePath,"predict_points_{}.txt".format(train_steps)))
+
             # 处理平铺展开
             # 处理成1 32 32 1的label
             # points_label为[122598,20]
@@ -503,3 +526,41 @@ class NeuralPointsRayMarching(nn.Module):
                 })
 
         return output
+    
+    def saveSemanticPoints(self,train_steps):
+
+        locs_in = self.predictDict.locs_in
+        bpnet_points_label = self.predictDict.bpnet_points_label
+        
+        savedata = np.concatenate((locs_in,bpnet_points_label[...,None].cpu().numpy()),axis=-1)
+        predict_label = bpnet_points_label[...,None].cpu().numpy()
+        savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name)
+
+        # np.savetxt(os.path.join(savePath,"predict_label_{}.txt".format(train_steps)),predict_label,fmt="%f")
+        # print("savetxt",savePath,"predict_label_{}.txt".format(train_steps))
+        # save_label = predict_label
+        pred_colors = []
+        for ind in range(len(predict_label)):
+            pred_colors.append(colordict[predict_label[ind][0]])
+        save_matrix =  torch.cat((torch.Tensor(locs_in[:,0:3]),torch.Tensor(pred_colors)),dim=1)
+        fileDir = os.path.join(savePath,"predict_points_{}.txt".format(train_steps))
+        np.savetxt(fileDir,save_matrix,fmt="%f")
+        print("savepoints:",fileDir)
+
+    def saveSemanticPoints_test(self,testIter,imgNum):
+
+        locs_in = self.predictDict.locs_in
+        bpnet_points_label = self.predictDict.bpnet_points_label
+        
+        savedata = np.concatenate((locs_in,bpnet_points_label[...,None].cpu().numpy()),axis=-1)
+        predict_label = bpnet_points_label[...,None].cpu().numpy()
+
+        savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name)
+        # save_label = predict_label
+        pred_colors = []
+        for ind in range(len(predict_label)):
+            pred_colors.append(colordict[predict_label[ind][0]])
+        save_matrix =  torch.cat((torch.Tensor(locs_in[:,0:3]),torch.Tensor(pred_colors)),dim=1)
+        fileDir = os.path.join(savePath,"test_predict_points_iter{}_imgNum.txt".format(testIter,imgNum))
+        np.savetxt(fileDir,save_matrix,fmt="%f")
+        print("savepoints:",fileDir)
