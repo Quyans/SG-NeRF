@@ -325,7 +325,7 @@ class PointAggregator(torch.nn.Module):
 
         if opt.shading_feature_mlp_layer2 > 0:
             in_channels = in_channels + (0 if opt.agg_feat_xyz_mode == "None" else self.pnt_channels) + (
-                dist_xyz_dim if (opt.agg_intrp_order > 0 and opt.num_feat_freqs == 0) else 0)
+                dist_xyz_dim if (opt.agg_intrp_order > 0 and opt.num_feat_freqs == 0) else 0) + (96 if opt.predict_semantic==1 else 0)
             out_channels = opt.shading_feature_num
             block2 = []
             for i in range(opt.shading_feature_mlp_layer2):
@@ -338,7 +338,7 @@ class PointAggregator(torch.nn.Module):
             self.block2 = self.passfunc
 
 
-        if opt.shading_feature_mlp_layer3 > 0:
+        if opt.shading_feature_mlp_layer3 > 0: #false
             in_channels = in_channels + (3 if "1" in list(opt.point_color_mode) else 0) + (
                 4 if "1" in list(opt.point_dir_mode) else 0)
             out_channels = opt.shading_feature_num
@@ -353,7 +353,7 @@ class PointAggregator(torch.nn.Module):
             self.block3 = self.passfunc
         #layer4:rotatation careless
         if opt.shading_feature_mlp_layer4 > 0:
-            in_channels = in_channels + 6*opt.num_feat_freqs+ (3 if "1" in list(opt.point_color_mode) else 0) + (96 if opt.predict_semantic==1 else 0)
+            in_channels = in_channels + 6*opt.num_feat_freqs+ (3 if "1" in list(opt.point_color_mode) else 0)
             out_channels = opt.shading_feature_num
             block4 = []
             for i in range(opt.shading_feature_mlp_layer4):
@@ -607,6 +607,11 @@ class PointAggregator(torch.nn.Module):
                 feat = torch.cat([feat, pts], dim=-1)
             if self.opt.agg_intrp_order > 0:
                 feat = torch.cat([feat, dists_flat], dim=-1)
+            if sampled_label_embedding is not None:
+                sampled_label_embedding = sampled_label_embedding.view(-1, sampled_label_embedding.shape[-1])
+                if self.opt.apply_pnt_mask > 0:
+                    sampled_label_embedding = sampled_label_embedding[pnt_mask_flat, :]
+                feat = torch.cat([feat, sampled_label_embedding], dim=-1)  # [35634,256+3]
             feat = self.block2(feat)
 
         if self.opt.shading_feature_mlp_linear>0:
@@ -664,13 +669,8 @@ class PointAggregator(torch.nn.Module):
                 row_theta_fai_feat = torch.cat([row[...,None],theta[...,None],fai[...,None]], dim=-1)#18
                 row_theta_fai_feat = positional_encoding(row_theta_fai_feat,self.opt.num_feat_freqs)#18
                 feat = torch.cat([feat, row_theta_fai_feat],dim= -1)
-            if sampled_label_embedding is not None:
-                sampled_label_embedding = sampled_label_embedding.view(-1, sampled_label_embedding.shape[-1])
-                if self.opt.apply_pnt_mask > 0:
-                    sampled_label_embedding = sampled_label_embedding[pnt_mask_flat, :]
-                feat = torch.cat([feat, sampled_label_embedding], dim=-1)  # [35634,256+3]
             
-            feat = self.block4(feat)  # [35634,256+18+96]
+            feat = self.block4(feat)  # [35634,256+18]
 
 
         if self.opt.agg_intrp_order == 1:#False

@@ -16,6 +16,12 @@ import random
 import imageio
 import math
 
+# 可视化
+
+# import hiddenlayer as hl
+
+from torchviz import make_dot
+
 # 交换地板和墙
 colordict = {
     0:[174,198,232],
@@ -119,9 +125,17 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
             opt.visual_items.append('fine_raycolor')
 
     def run_network_models(self):
-        return self.fill_invalid(self.net_ray_marching(**self.input), self.input)#self.net_ray_marching(**self.input)在这训练了！！！！！！！！！！！！！！！！！！！！
-
+        
+        MyConvNetVis = make_dot(self.net_ray_marching, self.input)
+        MyConvNetVis.format = "png"
+        # 指定文件生成的文件夹
+        MyConvNetVis.directory = "data"
+        # 生成文件
+        MyConvNetVis.view()
+        # return self.fill_invalid(self.net_ray_marching(**self.input), self.input)#self.net_ray_marching(**self.input)在这训练了！！！！！！！！！！！！！！！！！！！！
+        return self.fill_invalid(self.net_ray_marching(self.input), self.input)
     def fill_invalid(self, output, input):
+
         # ray_mask:             torch.Size([1, 1024])
         # coarse_is_background: torch.Size([1, 336, 1])  -> 1, 1024, 1
         # coarse_raycolor:      torch.Size([1, 336, 3])  -> 1, 1024, 3
@@ -198,7 +212,7 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
              **params, **self.found_funcs)
 
         self.model_names = ['ray_marching'] if getattr(self, "model_names", None) is None else self.model_names + ['ray_marching']
-
+        
         # parallel
         # if self.opt.gpu_ids:
         #     if len(self.opt.gpu_ids) == 1:
@@ -226,10 +240,10 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
             opt.viewNum = 3
             opt.aug = aug
 
-            print(self.opt == opt)
+            # print(self.opt == opt)
             bpnet = BPNet(opt)
 
-            print(bpnet)
+            # print(bpnet)
 
             # =2的时候是load checkpoints 
             if opt.bpnetweight and opt.load_mode!=2:
@@ -302,11 +316,11 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
         else:
             self.net_ray_marching.module.saveSemanticPoints(train_steps)
 
-    def saveSemanticPoints_test(self,testIter,imgNum):
+    def saveSemanticPoints_test(self,totalIter,imgNum):
         if self.opt.gpu_ids:
-            self.net_ray_marching.module.saveSemanticPoints_test(testIter,imgNum)
+            self.net_ray_marching.module.saveSemanticPoints_test(totalIter,imgNum)
         else:
-            self.net_ray_marching.saveSemanticPoints_test(testIter,imgNum)
+            self.net_ray_marching.saveSemanticPoints_test(totalIter,imgNum)
     
 
 # 用来存放需要save的东西
@@ -343,27 +357,49 @@ class NeuralPointsRayMarching(nn.Module):
         self.opt = opt
         self.neural_points = neural_points
         self.predictDict = PredictDict()
+
+
         
+    # def forward(self,
+    #             campos,
+    #             raydir,
+    #             gt_image=None,
+    #             bg_color=None,
+    #             camrotc2w=None,
+    #             pixel_idx=None,
+    #             near=None,
+    #             far=None,
+    #             focal=None,
+    #             h=None,
+    #             w=None,
+    #             intrinsic=None,
+    #             pixel_label=None,
+    #             train_id_paths=None,
+    #             # test_id_paths=None,
+    #             image_path=None,
+    #             save_label_switch=False,
+    #             train_steps=None,
+    #             **kargs):
     def forward(self,
-                campos,
-                raydir,
-                gt_image=None,
-                bg_color=None,
-                camrotc2w=None,
-                pixel_idx=None,
-                near=None,
-                far=None,
-                focal=None,
-                h=None,
-                w=None,
-                intrinsic=None,
-                pixel_label=None,
-                train_id_paths=None,
-                # test_id_paths=None,
-                image_path=None,
-                save_label_switch=False,
-                train_steps=None,
+                inputs,
                 **kargs):
+        campos = inputs["campos"]
+        raydir = inputs["raydir"]
+        gt_image = inputs["gt_image"] if inputs.get('gt_image')!=None else None
+        bg_color = inputs["bg_color"] if inputs.get('bg_color')!=None else None
+        camrotc2w = inputs["camrotc2w"] if inputs.get('camrotc2w')!=None else None
+        pixel_idx = inputs["pixel_idx"] if inputs.get('pixel_idx')!=None else None
+        near = inputs["near"] if inputs.get('near')!=None else None
+        far = inputs["far"] if inputs.get('far')!=None else None
+        focal = inputs["focal"] if inputs.get('focal')!=None else None
+        h = inputs["h"] if inputs.get('h')!=None else None
+        w = inputs["w"] if inputs.get('w')!=None else None
+        intrinsic = inputs["intrinsic"] if inputs.get('intrinsic')!=None else None
+        pixel_label = inputs["pixel_label"] if inputs.get('pixel_label')!=None else None
+        train_id_paths = inputs["train_id_paths"] if inputs.get('train_id_paths')!=None else None
+        image_path = inputs["image_path"] if inputs.get('image_path')!=None else None
+        save_label_switch = inputs["save_label_switch"] if inputs.get('save_label_switch')!=None else False
+        train_steps = inputs["train_steps"] if inputs.get('train_steps')!=None else None
 
         output = {}
 
@@ -525,6 +561,8 @@ class NeuralPointsRayMarching(nn.Module):
                     "shading_avg_embedding": torch.zeros([0, 0, sampled_embedding.shape[-1]], device="cuda"),
                 })
 
+
+
         return output
     
     def saveSemanticPoints(self,train_steps):
@@ -547,7 +585,7 @@ class NeuralPointsRayMarching(nn.Module):
         np.savetxt(fileDir,save_matrix,fmt="%f")
         print("savepoints:",fileDir)
 
-    def saveSemanticPoints_test(self,testIter,imgNum):
+    def saveSemanticPoints_test(self,totalIter,imgNum):
 
         locs_in = self.predictDict.locs_in
         bpnet_points_label = self.predictDict.bpnet_points_label
@@ -555,12 +593,12 @@ class NeuralPointsRayMarching(nn.Module):
         savedata = np.concatenate((locs_in,bpnet_points_label[...,None].cpu().numpy()),axis=-1)
         predict_label = bpnet_points_label[...,None].cpu().numpy()
 
-        savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name)
+        savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name,"test_{}".format(totalIter))
         # save_label = predict_label
         pred_colors = []
         for ind in range(len(predict_label)):
             pred_colors.append(colordict[predict_label[ind][0]])
         save_matrix =  torch.cat((torch.Tensor(locs_in[:,0:3]),torch.Tensor(pred_colors)),dim=1)
-        fileDir = os.path.join(savePath,"test_predict_points_iter{}_imgNum.txt".format(testIter,imgNum))
+        fileDir = os.path.join(savePath,"test_predict_points_iter{}_imgNum{}.txt".format(totalIter,imgNum))
         np.savetxt(fileDir,save_matrix,fmt="%f")
         print("savepoints:",fileDir)
