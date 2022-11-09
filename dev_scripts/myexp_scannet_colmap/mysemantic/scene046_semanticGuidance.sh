@@ -4,12 +4,12 @@
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
 # name='scene024102_Semantic_step50_debug2'
-name='scene046_02_Semantic_640480step50_feats2one'
+name='scene046_00_Semantic_640480step50_block2bpnet_'
 
 resume_iter=best #latest
 
-data_root="${nrDataRoot}/scannet/scans/"
-scan="scene046/scene0046_02"
+data_root="${nrDataRoot}/scannet/scans/scene046"
+scan="scene0046_00"
 
 img_wh="640 480"
 
@@ -83,6 +83,7 @@ apply_pnt_mask=1
 shading_feature_mlp_layer0=1
 shading_feature_mlp_layer1=2
 shading_feature_mlp_layer2=0
+shading_feature_mlp_layer2_bpnet=1
 shading_feature_mlp_linear=0
 shading_feature_mlp_layer3=0 #2 原本#0 
 shading_feature_mlp_layer4=1 #0 原本 #1
@@ -122,7 +123,7 @@ lr_policy="iter_exponential_decay"
 lr_decay_iters=1000000
 lr_decay_exp=0.1
 
-gpu_ids='1'
+gpu_ids='0'
 checkpoints_dir="${nrCheckpoint}/scannet/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
@@ -241,6 +242,7 @@ python3 train_ft.py \
         --shading_feature_mlp_layer0 $shading_feature_mlp_layer0 \
         --shading_feature_mlp_layer1 $shading_feature_mlp_layer1 \
         --shading_feature_mlp_layer2 $shading_feature_mlp_layer2 \
+        --shading_feature_mlp_layer2_bpnet $shading_feature_mlp_layer2_bpnet\
         --shading_feature_mlp_layer3 $shading_feature_mlp_layer3 \
         --shading_feature_mlp_layer4 $shading_feature_mlp_layer4 \
         --shading_feature_mlp_linear $shading_feature_mlp_linear \
