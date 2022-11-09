@@ -17,10 +17,10 @@ import imageio
 import math
 
 # 可视化
-from torch.utils.tensorboard import SummaryWriter
-from collections import namedtuple
-from typing import Any
-writer = SummaryWriter('my_log/mnist')
+# from torch.utils.tensorboard import SummaryWriter
+# from collections import namedtuple
+# from typing import Any
+# writer = SummaryWriter('my_log/mnist')
 # import hiddenlayer as hl
 
 from torchviz import make_dot
