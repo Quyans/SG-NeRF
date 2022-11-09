@@ -1,16 +1,14 @@
 #!/bin/bash
 
-semantic_guidance=1
-# predict_semantic=0
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
 # name='scene024102_Semantic_step50_debug2'
-name="scene024102_Semantic_640480step5_feats2one_withsemanticEmbedding_repair_sample"
+name="scene0241_02_Semantic_640480step5_feats2one_withSemanticEmbedding_block2bpnet"
 
 
 resume_iter=best #latest
 
-data_root="${nrDataRoot}/scannet/scans/"
+data_root="${nrDataRoot}/scannet/scans"
 scan="scene0241_02"
 
 img_wh="640 480"
@@ -68,7 +66,7 @@ wcoord_query=1
 z_depth_dim=400
 max_o=610000
 ranges=" -10.0 -10.0 -10.0 10.0 10.0 10.0 "
-SR=24 # 24
+SR=40 # 24
 K=8 #8
 P=32 # 32
 NN=2
@@ -85,6 +83,7 @@ apply_pnt_mask=1
 shading_feature_mlp_layer0=1
 shading_feature_mlp_layer1=2
 shading_feature_mlp_layer2=0
+shading_feature_mlp_layer2_bpnet=1
 shading_feature_mlp_linear=0
 shading_feature_mlp_layer3=0 #2 原本#0 
 shading_feature_mlp_layer4=1 #0 原本 #1
@@ -130,13 +129,13 @@ resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
 save_predict_label=1 
 save_label_iter=1000 #预测一次
-save_iter_freq=10000
+save_iter_freq=1000
 save_point_freq=10000 #301840 #1
 maximum_step=400000 #500000 #250000 #800000
 
 niter=10000 #1000000
 niter_decay=10000 #250000
-n_threads=2
+n_threads=1
 
 train_and_test=0 #1
 test_num=25
@@ -243,6 +242,7 @@ python3 train_ft.py \
         --shading_feature_mlp_layer0 $shading_feature_mlp_layer0 \
         --shading_feature_mlp_layer1 $shading_feature_mlp_layer1 \
         --shading_feature_mlp_layer2 $shading_feature_mlp_layer2 \
+        --shading_feature_mlp_layer2_bpnet $shading_feature_mlp_layer2_bpnet\
         --shading_feature_mlp_layer3 $shading_feature_mlp_layer3 \
         --shading_feature_mlp_layer4 $shading_feature_mlp_layer4 \
         --shading_feature_mlp_linear $shading_feature_mlp_linear \

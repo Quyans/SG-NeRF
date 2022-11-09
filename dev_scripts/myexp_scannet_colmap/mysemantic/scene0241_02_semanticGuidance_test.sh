@@ -7,11 +7,12 @@ nrDataRoot="../data_src"
 # name='scene024102_Semantic_step50_debug2'
 name='scene024102_Semantic_640480step5_feats2one_withsemanticEmbedding_repair_sample'
 
-resume_iter=best #latest
+resume_iter=60000 #latest
+save_predict_label=1
 
 data_root="${nrDataRoot}/scannet/scans/"
 scan="scene0241_02"
-
+img_wh="640 480"
 
 semantic_guidance=1
 layers_2d=34
@@ -300,7 +301,8 @@ python3 test_ft.py \
         --arch_3d $arch_3d \
         --classes $classes \
         --predict_semantic $predict_semantic\
-        
+        --save_predict_label $save_predict_label\
+        --img_wh $img_wh\
         # --semantic_guidance $semantic_guidance
         
         

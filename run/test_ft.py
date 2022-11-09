@@ -205,8 +205,7 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, l
         if len(ray_masks) > 0:
             ray_masks = torch.cat(ray_masks, dim=1)
 
-        if opt.save_predict_label > 0 and i % opt.save_label_iter == 0:
-            model.saveSemanticPoints_test(total_num,i)
+        
 
         gt_image = torch.zeros((height*width, 3), dtype=torch.float32)
         gt_image[edge_mask, :] = tmpgts['gt_image'].clone()
@@ -232,7 +231,8 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, l
             if key in opt.visual_items:
                 visualizer.print_details("{}:{}".format(key, visuals[key].shape))
                 visuals[key] = visuals[key].reshape(height, width, 3)
-
+        if opt.save_predict_label > 0:
+            model.saveSemanticPoints_test(test_steps,i)
 
         print("num.{} in {} cases: time used: {} s".format(i, total_num // opt.test_num_step, time.time() - stime), " at ", visualizer.image_dir)
         visualizer.display_current_results(visuals, i, opt=opt)
