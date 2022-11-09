@@ -17,10 +17,42 @@ import imageio
 import math
 
 # 可视化
-
+from torch.utils.tensorboard import SummaryWriter
+from collections import namedtuple
+from typing import Any
+writer = SummaryWriter('my_log/mnist')
 # import hiddenlayer as hl
 
 from torchviz import make_dot
+
+class ModelWrapper(torch.nn.Module):
+    """
+    Wrapper class for model with dict/list rvalues.
+    """
+ 
+    def __init__(self, model: torch.nn.Module) -> None:
+        """
+        Init call.
+        """
+        super().__init__()
+        self.model = model
+ 
+    def forward(self, input_x: torch.Tensor) -> Any:
+        """
+        Wrap forward call.
+        """
+        data = self.model(input_x)
+ 
+        if isinstance(data, dict):
+            data_named_tuple = namedtuple("ModelEndpoints", sorted(data.keys()))  # type: ignore
+            data = data_named_tuple(**data)  # type: ignore
+ 
+        elif isinstance(data, list):
+            data = tuple(data)
+ 
+        return data
+
+
 
 # 交换地板和墙
 colordict = {
@@ -126,14 +158,24 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
 
     def run_network_models(self):
         
-        MyConvNetVis = make_dot(self.net_ray_marching, self.input)
-        MyConvNetVis.format = "png"
-        # 指定文件生成的文件夹
-        MyConvNetVis.directory = "data"
-        # 生成文件
-        MyConvNetVis.view()
+        # MyConvNetVis = make_dot(self.net_ray_marching, self.input)
+        # MyConvNetVis.format = "png"
+        # # 指定文件生成的文件夹
+        # MyConvNetVis.directory = "data"
+        # # 生成文件
+        # MyConvNetVis.view()
+        # self.net_ray_marching.eval()
+        # writer.add_graph(self.net_ray_marching,self.input,use_strict_trace=False)
+
+        
+        # model_wrapper = ModelWrapper(self.net_ray_marching)
+        # writer.add_graph(model_wrapper,self.input)
+        # model_wrapper = ModelWrapper(self.net_ray_marching)
+        # writer.add_graph(self.net_ray_marching,self.input)
+
         # return self.fill_invalid(self.net_ray_marching(**self.input), self.input)#self.net_ray_marching(**self.input)在这训练了！！！！！！！！！！！！！！！！！！！！
         return self.fill_invalid(self.net_ray_marching(self.input), self.input)
+
     def fill_invalid(self, output, input):
 
         # ray_mask:             torch.Size([1, 1024])
@@ -214,16 +256,18 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
         self.model_names = ['ray_marching'] if getattr(self, "model_names", None) is None else self.model_names + ['ray_marching']
         
         # parallel
-        # if self.opt.gpu_ids:
-        #     if len(self.opt.gpu_ids) == 1:
-        #         self.net_ray_marching.to(self.opt.gpu_ids[0])
-        #     else:
-        #         self.net_ray_marching = torch.nn.DataParallel(
-        #             self.net_ray_marching, self.opt.gpu_ids)
         if self.opt.gpu_ids:
-            self.net_ray_marching.to(self.device)
-            self.net_ray_marching = torch.nn.DataParallel(
-                self.net_ray_marching, self.opt.gpu_ids)
+            if len(self.opt.gpu_ids) == 1:
+                self.net_ray_marching.to(self.opt.gpu_ids[0])
+                self.opt.useParallel = False
+            else:
+                self.net_ray_marching = torch.nn.DataParallel(
+                    self.net_ray_marching, self.opt.gpu_ids)
+                self.opt.useParallel = True
+        # if self.opt.gpu_ids:
+        #     self.net_ray_marching.to(self.device)
+        #     self.net_ray_marching = torch.nn.DataParallel(
+        #         self.net_ray_marching, self.opt.gpu_ids)
 
 
     def check_getAggregator(self, opt, **kwargs):
@@ -312,15 +356,25 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
 
     def saveSemanticPoints(self,train_steps):
         if self.opt.gpu_ids:
-            self.net_ray_marching.module.saveSemanticPoints(train_steps)
+            if self.opt.useParallel:
+                self.net_ray_marching.module.saveSemanticPoints(train_steps)
+            self.net_ray_marching.saveSemanticPoints(train_steps)
         else:
             self.net_ray_marching.module.saveSemanticPoints(train_steps)
 
     def saveSemanticPoints_test(self,totalIter,imgNum):
+
         if self.opt.gpu_ids:
-            self.net_ray_marching.module.saveSemanticPoints_test(totalIter,imgNum)
-        else:
+            if self.opt.useParallel:
+                self.net_ray_marching.module.saveSemanticPoints_test(totalIter,imgNum)
             self.net_ray_marching.saveSemanticPoints_test(totalIter,imgNum)
+        else:
+            self.net_ray_marching.module.saveSemanticPoints_test(totalIter,imgNum)
+
+        # if self.opt.gpu_ids:
+        #     self.net_ray_marching.module.saveSemanticPoints_test(totalIter,imgNum)
+        # else:
+        #     self.net_ray_marching.saveSemanticPoints_test(totalIter,imgNum)
     
 
 # 用来存放需要save的东西
@@ -383,6 +437,7 @@ class NeuralPointsRayMarching(nn.Module):
     def forward(self,
                 inputs,
                 **kargs):
+
         campos = inputs["campos"]
         raydir = inputs["raydir"]
         gt_image = inputs["gt_image"] if inputs.get('gt_image')!=None else None
@@ -395,20 +450,20 @@ class NeuralPointsRayMarching(nn.Module):
         h = inputs["h"] if inputs.get('h')!=None else None
         w = inputs["w"] if inputs.get('w')!=None else None
         intrinsic = inputs["intrinsic"] if inputs.get('intrinsic')!=None else None
-        pixel_label = inputs["pixel_label"] if inputs.get('pixel_label')!=None else None
-        train_id_paths = inputs["train_id_paths"] if inputs.get('train_id_paths')!=None else None
-        image_path = inputs["image_path"] if inputs.get('image_path')!=None else None
-        save_label_switch = inputs["save_label_switch"] if inputs.get('save_label_switch')!=None else False
-        train_steps = inputs["train_steps"] if inputs.get('train_steps')!=None else None
+        pixel_label = inputs["pixel_label"] if inputs.get('pixel_label')!=None else None 
+        train_id_paths = inputs["train_id_paths"] if inputs.get('train_id_paths')!=None else None #需要改
+        test_id_paths = inputs["test_id_paths"] if inputs.get('test_id_paths')!=None else None #需要改
+        image_path = inputs["image_path"] if inputs.get('image_path')!=None else None #image_path
 
         output = {}
 
         if self.opt.predict_semantic:
             # 提前做bpnet的方法
             locs_in,feats_in = self.neural_points.getPointsData()
-            bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in,train_id_paths,image_path)
+            bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in)
+            # bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in,train_id_paths,image_path)
 
-            self.predictDict.bpnet_points_label = bpnet_points_label
+            self.predictDict.bpnet_points_label = bpnet_points_label.detach()
             self.predictDict.locs_in = locs_in
 
             # if save_label_switch:
@@ -486,6 +541,10 @@ class NeuralPointsRayMarching(nn.Module):
         # blend_weight: N x Rays x Samples x 1
         # background_transmission: N x Rays x 1
         # ray march
+
+        # output = torch.logical_not(torch.any(ray_valid, dim=-1, keepdims=True)).repeat(1, 1, 3).to(torch.float32)#[1,784,3],all is 0
+        # return output
+
         output["queried_shading"] = torch.logical_not(torch.any(ray_valid, dim=-1, keepdims=True)).repeat(1, 1, 3).to(torch.float32)#[1,784,3],all is 0
         if self.return_color:#True
             if "bg_ray" in kargs:
@@ -560,7 +619,6 @@ class NeuralPointsRayMarching(nn.Module):
                     "shading_avg_conf": torch.zeros([0, 0, 1], device="cuda"),
                     "shading_avg_embedding": torch.zeros([0, 0, sampled_embedding.shape[-1]], device="cuda"),
                 })
-
 
 
         return output

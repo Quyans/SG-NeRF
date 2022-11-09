@@ -101,6 +101,11 @@ class PointAggregator(torch.nn.Module):
             help='interp to agged features mlp num')
 
         parser.add_argument(
+            '--shading_feature_mlp_layer2_bpnet',
+            type=int,
+            default=0,
+            help='interp to agged bpnet features mlp num')
+        parser.add_argument(
             '--shading_feature_mlp_layer3',
             type=int,
             default=0,
@@ -323,9 +328,22 @@ class PointAggregator(torch.nn.Module):
             self.block1 = self.passfunc
 
 
-        if opt.shading_feature_mlp_layer2 > 0:
+        # if opt.shading_feature_mlp_layer2 > 0:
+        #     in_channels = in_channels + (0 if opt.agg_feat_xyz_mode == "None" else self.pnt_channels) + (
+        #         dist_xyz_dim if (opt.agg_intrp_order > 0 and opt.num_feat_freqs == 0) else 0) + (96 if opt.predict_semantic==1 else 0)  # 
+        #     out_channels = opt.shading_feature_num
+        #     block2 = []
+        #     for i in range(opt.shading_feature_mlp_layer2):
+        #         block2.append(nn.Linear(in_channels, out_channels))
+        #         block2.append(self.act(inplace=True))
+        #         in_channels = out_channels
+        #     self.block2 = nn.Sequential(*block2)
+        #     block_init_lst.append(self.block2)
+        # else:
+        #     self.block2 = self.passfunc
+        if opt.shading_feature_mlp_layer2 > 0:  #False
             in_channels = in_channels + (0 if opt.agg_feat_xyz_mode == "None" else self.pnt_channels) + (
-                dist_xyz_dim if (opt.agg_intrp_order > 0 and opt.num_feat_freqs == 0) else 0) + (96 if opt.predict_semantic==1 else 0)
+                dist_xyz_dim if (opt.agg_intrp_order > 0 and opt.num_feat_freqs == 0) else 0)
             out_channels = opt.shading_feature_num
             block2 = []
             for i in range(opt.shading_feature_mlp_layer2):
@@ -337,6 +355,16 @@ class PointAggregator(torch.nn.Module):
         else:
             self.block2 = self.passfunc
 
+        if opt.shading_feature_mlp_layer2_bpnet > 0:
+            in_channels = in_channels + (96 if opt.predict_semantic==1 else 0) 
+            out_channels = opt.shading_feature_num
+            block2_bpnet = []
+            for i in range(opt.shading_feature_mlp_layer2_bpnet):
+                block2_bpnet.append(nn.Linear(in_channels, out_channels))
+                block2_bpnet.append(self.act(inplace=True))
+                in_channels = out_channels
+            self.block2_bpnet = nn.Sequential(*block2_bpnet)
+            block_init_lst.append(self.block2_bpnet)
 
         if opt.shading_feature_mlp_layer3 > 0: #false
             in_channels = in_channels + (3 if "1" in list(opt.point_color_mode) else 0) + (
@@ -607,12 +635,16 @@ class PointAggregator(torch.nn.Module):
                 feat = torch.cat([feat, pts], dim=-1)
             if self.opt.agg_intrp_order > 0:
                 feat = torch.cat([feat, dists_flat], dim=-1)
+            feat = self.block2(feat)
+
+        if self.opt.shading_feature_mlp_layer2_bpnet>0: #True
+            
             if sampled_label_embedding is not None:
                 sampled_label_embedding = sampled_label_embedding.view(-1, sampled_label_embedding.shape[-1])
                 if self.opt.apply_pnt_mask > 0:
                     sampled_label_embedding = sampled_label_embedding[pnt_mask_flat, :]
                 feat = torch.cat([feat, sampled_label_embedding], dim=-1)  # [35634,256+3]
-            feat = self.block2(feat)
+            feat = self.block2_bpnet(feat)
 
         if self.opt.shading_feature_mlp_linear>0:
             feat = self.block_linear(feat)

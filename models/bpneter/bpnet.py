@@ -331,7 +331,8 @@ class BPNet(nn.Module):
 
 
 
-    def get_2d(self,train_id_paths, coords: np.ndarray,image_path):
+    # def get_2d(self,train_id_paths, coords: np.ndarray,image_path):
+    def get_2d(self, coords: np.ndarray):
         """
         :param      coords: Nx3
         :return:    imgs:   CxHxWxV Tensor
@@ -340,7 +341,9 @@ class BPNet(nn.Module):
         """
         # 默认为False
         self.val_benchmark = False
-        frames_path = train_id_paths[0]
+        # frames_path = train_id_paths[0]
+        frames_path = ['/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/0.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg']
+        image_path = "/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/1120.jpg"
         #frames_path 是這個場景的训练集所有图片 对于scannet241是100帧
         # print(room_id)
         partial = int(len(frames_path) / self.viewNum)
@@ -426,9 +429,11 @@ class BPNet(nn.Module):
         return imgs, links
 
 
-    def train_bpnet(self,locs_in,feats_in,train_id_paths,image_path):
-
-        colors, links = self.get_2d(train_id_paths, locs_in,image_path)
+    def train_bpnet(self,locs_in,feats_in):
+    # def train_bpnet(self,locs_in,feats_in,train_id_paths,image_path):
+        
+        colors, links = self.get_2d(locs_in)
+        # colors, links = self.get_2d(train_id_paths, locs_in,image_path)
         
         locs = self.prevoxel_transforms(locs_in) if self.aug else locs_in
         locs, feats, labels_3d, inds_reconstruct, links = self.voxelizer.voxelize(locs, feats_in, link=links)

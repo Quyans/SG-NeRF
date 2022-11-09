@@ -329,7 +329,9 @@ class ScannetFtDataset(BaseDataset):
         print("all_id_list",len(self.all_id_list))
         print("test_id_list",len(self.test_id_list), self.test_id_list)
         print("train_id_list",len(self.train_id_list))
+        
         #self.train_id_list = self.remove_blurry(self.train_id_list)
+        
         self.train_id_paths = [ [os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(i)) for i in self.train_id_list]]
         self.test_id_paths = [ [os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(i)) for i in self.test_id_list]]
 
@@ -614,7 +616,7 @@ class ScannetFtDataset(BaseDataset):
         gt_semantic_img = gt_semantic_img.resize(self.img_wh, Image.NEAREST)
         gt_semantic_img = self.transform(gt_semantic_img)  # (batch, h, w)
 
-        item["image_path"] = image_path
+        # item["image_path"] = image_path
         item["intrinsic"] = intrinsic
         # item["intrinsic"] = sample['intrinsics'][0, ...]
         item["campos"] = torch.from_numpy(campos).float()
@@ -698,8 +700,8 @@ class ScannetFtDataset(BaseDataset):
                 item['bg_color'] = torch.FloatTensor(self.bg_color)
 
         # 返回训练集
-        item['train_id_paths'] = self.train_id_paths
-        item['test_id_paths'] = self.test_id_paths
+        # item['train_id_paths'] = self.train_id_paths
+        # item['test_id_paths'] = self.test_id_paths
         return item
 
 

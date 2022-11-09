@@ -940,7 +940,7 @@ class NeuralPoints(nn.Module):
     #     :return:    imgs:   CxHxWxV Tensor
     #                 labels: HxWxV Tensor
     #                 links: Nx4xV(1,H,W,mask) Tensor
-    #     """
+    #     """f
     #     # 默认为False
     #     self.val_benchmark = False
     #     frames_path = train_id_paths[0]

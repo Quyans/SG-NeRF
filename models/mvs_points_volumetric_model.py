@@ -63,9 +63,15 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
                 mvs_params = mvs_params + [par[1] for par in param_lst]
             else:
                 param_lst = list(net.named_parameters())
-                bpnet_params = bpnet_params +  [par[1] for par in param_lst if par[0].startswith("module.bpnet")]
-                net_params = net_params + [par[1] for par in param_lst if (not par[0].startswith("module.neural_points") and not par[0].startswith("module.bpnet"))]
-                neural_params = neural_params + [par[1] for par in param_lst if par[0].startswith("module.neural_points")]
+
+                if opt.useParallel:
+                    bpnet_params = bpnet_params +  [par[1] for par in param_lst if par[0].startswith("module.bpnet")]
+                    net_params = net_params + [par[1] for par in param_lst if (not par[0].startswith("module.neural_points") and not par[0].startswith("module.bpnet"))]
+                    neural_params = neural_params + [par[1] for par in param_lst if par[0].startswith("module.neural_points")]
+                else:
+                    bpnet_params = bpnet_params +  [par[1] for par in param_lst if par[0].startswith("bpnet")]
+                    net_params = net_params + [par[1] for par in param_lst if (not par[0].startswith("neural_points") and not par[0].startswith("bpnet"))]
+                    neural_params = neural_params + [par[1] for par in param_lst if par[0].startswith("neural_points")]
         self.bpnet_params = bpnet_params
         self.net_params = net_params
         self.neural_params = neural_params
