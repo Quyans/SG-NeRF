@@ -15,7 +15,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
 
     def __init__(self,):
         super().__init__()
-        self.optimizer, self.neural_point_optimizer, self.output, self.raygen_func, self.render_func, self.blend_func, self.coarse_raycolor, self.gt_image, self.input, self.l1loss, self.l2loss, self.tonemap_func, self.top_ray_miss_ids, self.top_ray_miss_loss, self.loss_ray_masked_coarse_raycolor, self.loss_ray_miss_coarse_raycolor, self.loss_total, self.loss_coarse_raycolor, self.loss_conf_coefficient = None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
+        self.optimizer,self.bpnet_optimizer, self.neural_point_optimizer, self.output, self.raygen_func, self.render_func, self.blend_func, self.coarse_raycolor, self.gt_image, self.input, self.l1loss, self.l2loss, self.tonemap_func, self.top_ray_miss_ids, self.top_ray_miss_loss, self.loss_ray_masked_coarse_raycolor, self.loss_ray_miss_coarse_raycolor, self.loss_total, self.loss_coarse_raycolor, self.loss_conf_coefficient = None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
 
 
     @staticmethod
@@ -89,12 +89,12 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
         # optimizer = torch.optim.SGD(params_list, lr=args.base_lr, momentum=args.momentum,
         #                             weight_decay=args.weight_decay)
         if len(bpnet_params) > 0:
-            self.optimizer = torch.optim.SGD(bpnet_params,
+            self.bpnet_optimizer = torch.optim.SGD(bpnet_params,
                                           lr=opt.bpnet_lr,
                                           momentum=opt.bpnet_momentum,
                                           weight_decay=opt.bpnet_weight_decay
                                           )
-            self.optimizers.append(self.optimizer)
+            self.optimizers.append(self.bpnet_optimizer)
 
         if len(net_params) > 0:
             self.optimizer = torch.optim.Adam(net_params,
@@ -132,11 +132,13 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
                     self.optimizer.step()
                 if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 2 == 1:
                     self.mvs_optimizer.step()
-            else:
-                if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 2 == 0:
+            else: #True
+                if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 0:
                     self.optimizer.step()
-                if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 2 == 1:
+                if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 1:
                     self.neural_point_optimizer.step()
+                if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 2:
+                    self.bpnet_optimizer.step()
 
 
     def forward(self):
@@ -145,7 +147,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
             # print("volume_feature", volume_feature.shape)
             self.neural_points.set_points(points_xyz, points_embedding, points_color=points_colors, points_dir=points_dirs, points_conf=points_conf, parameter=self.opt.feedforward==0) # if feedforward, no neural points optimization
         self.output = self.run_network_models()#colmap go this way
-        if "depths_h" in self.input:
+        if "depths_h" in self.input: #Falses
             depth_gt = self.input["depths_h"][:,self.opt.trgt_id,...] if self.input["depths_h"].dim() > 3 else self.input["depths_h"]
             self.output["ray_depth_mask"] = depth_gt > 0
         self.set_visuals()
@@ -153,11 +155,11 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
             self.compute_losses()
 
     def update_rank_ray_miss(self, total_steps):
-        if (self.opt.prob_kernel_size is None or np.sum(np.asarray(self.opt.prob_tiers) < total_steps) < (len(self.opt.prob_kernel_size) // 3)):
+        if (self.opt.prob_kernel_size is None or np.sum(np.asarray(self.opt.prob_tiers) < total_steps) < (len(self.opt.prob_kernel_size) // 3)):  #true
 
-            if self.opt.prob_freq > 0 and self.opt.prob_num_step > 1:
+            if self.opt.prob_freq > 0 and self.opt.prob_num_step > 1: #True
                 self.top_ray_miss_loss, self.top_ray_miss_ids = self.rank_ray_miss(self.input["id"][0], self.loss_ray_miss_coarse_raycolor, self.top_ray_miss_ids, self.top_ray_miss_loss)
-            elif self.opt.prob_freq > 0 and self.opt.prob_num_step == 1:
+            elif self.opt.prob_freq > 0 and self.opt.prob_num_step == 1: #False
                 self.top_ray_miss_loss[0] = max(self.loss_ray_miss_coarse_raycolor, self.top_ray_miss_loss[0])
 
 
@@ -204,9 +206,10 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
         self.optimizers.clear()
         self.schedulers.clear()
         self.neural_params.clear()
+        self.bpnet_params.clear()
         self.mvs_params.clear()
         # self.optimizer.cpu(), self.neural_point_optimizer.cpu()
-        del self.optimizer, self.neural_point_optimizer, self.optimizers, self.schedulers, self.mvs_params, self.neural_params
+        del self.optimizer, self.neural_point_optimizer,self.bpnet_optimizer, self.optimizers, self.schedulers, self.mvs_params, self.neural_params,self.bpnet_params
 
 
     def reset_optimizer(self, opt):
@@ -218,7 +221,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
         self.net_params.clear()
         self.neural_params.clear()
         self.mvs_params.clear()
-        del self.optimizer, self.neural_point_optimizer, self.net_params, self.neural_params, self.mvs_params
+        del self.optimizer, self.neural_point_optimizer,self.bpnet_optimizer, self.net_params, self.neural_params, self.mvs_params,self.bpnet_params
 
     def clean_scheduler(self):
         for scheduler in self.schedulers:
@@ -268,6 +271,9 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
             self.neural_points.cpu()
             del self.neural_points
         print("self.model_names", self.model_names)
+        if hasattr(self,"bpnet"):
+            self.bpnet.cpu()
+            del self.bpnet
         if hasattr(self, "net_ray_marching"):
             self.net_ray_marching.cpu()
             del self.net_ray_marching
@@ -280,6 +286,9 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
         if hasattr(self, "neural_params"):
             self.neural_params.clear()
             del self.neural_params
+        if hasattr(self, "bpnet_params"):
+            self.bpnet_params.clear()
+            del self.bpnet_params
         if hasattr(self, "mvs_params"):
             self.mvs_params.clear()
             del self.mvs_params
@@ -289,7 +298,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
         if hasattr(self, "optimizers"):
             self.optimizers.clear()
             self.schedulers.clear()
-        del self.optimizer,  self.neural_point_optimizer, self.output, self.raygen_func, self.render_func, self.blend_func, self.coarse_raycolor, self.gt_image, self.input, self.l1loss, self.l2loss, self.tonemap_func, self.top_ray_miss_ids, self.top_ray_miss_loss, self.loss_ray_masked_coarse_raycolor, self.loss_ray_miss_coarse_raycolor, self.loss_total, self.loss_coarse_raycolor, self.loss_conf_coefficient
+        del self.optimizer,  self.neural_point_optimizer,self.bpnet_optimizer, self.output, self.raygen_func, self.render_func, self.blend_func, self.coarse_raycolor, self.gt_image, self.input, self.l1loss, self.l2loss, self.tonemap_func, self.top_ray_miss_ids, self.top_ray_miss_loss, self.loss_ray_masked_coarse_raycolor, self.loss_ray_miss_coarse_raycolor, self.loss_total, self.loss_coarse_raycolor, self.loss_conf_coefficient
 
     def set_bg(self, xyz_world_sect_plane, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, plane_color, fg_masks=None,**kwargs):
         warped_feats = []
