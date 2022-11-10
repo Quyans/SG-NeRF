@@ -434,8 +434,8 @@ class NeuralPointsRayMarching(nn.Module):
         if self.opt.predict_semantic:
             # 提前做bpnet的方法
             locs_in,feats_in = self.neural_points.getPointsData()
-            bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in)
-            # bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in,train_id_paths,image_path)
+            # bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in)
+            bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in,train_id_paths,image_path)
 
             self.predictDict.bpnet_points_label = bpnet_points_label.detach()
             self.predictDict.locs_in = locs_in

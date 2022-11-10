@@ -125,5 +125,7 @@ viewer/testData
 checkpoints/
 data_src/
 
-bpnetInitmodel
-./dev_scripts
+
+/bpnetInitmodel/
+/dev_scripts
+

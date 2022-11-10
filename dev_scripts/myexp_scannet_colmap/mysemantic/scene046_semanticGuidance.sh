@@ -129,7 +129,7 @@ resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
 save_predict_label=1 
 save_label_iter=1000 #预测一次
-save_iter_freq=10000
+save_iter_freq=1000
 save_point_freq=10000 #301840 #1
 maximum_step=400000 #500000 #250000 #800000
 
