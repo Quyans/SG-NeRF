@@ -998,8 +998,13 @@ def main():
             if hasattr(opt, "save_point_freq") and total_steps and total_steps % opt.save_point_freq == 0 and (opt.prune_iter > 0 and total_steps <= opt.prune_max_iter or opt.save_point_freq==1):
                 visualizer.save_neural_points(total_steps, model.neural_points.xyz, model.neural_points.points_embeding, data, save_ref=opt.load_points==0)
                 visualizer.print_details('saving neural points at total_steps {})'.format(total_steps))
+            
+            
             try:
                 if total_steps == 10000 or (total_steps % opt.save_iter_freq == 0 and total_steps > 0):
+                    # 存bpnet预测的点云embedding
+                    model.saveSemanticEmbedding(total_steps)
+                    # 存参数
                     other_states = {
                         "best_PSNR": best_PSNR,
                         "best_iter": best_iter,

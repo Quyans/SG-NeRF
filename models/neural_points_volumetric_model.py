@@ -329,6 +329,15 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
     def update_rank_ray_miss(self, total_steps):
         raise NotImplementedError
 
+    def saveSemanticEmbedding(self,epochs):
+        # 存预测的点云embedding
+        if self.opt.gpu_ids:
+            if self.opt.useParallel:
+                self.net_ray_marching.module.saveSemanticEmbedding(epochs)
+            self.net_ray_marching.saveSemanticEmbedding(epochs)
+        else:
+            self.net_ray_marching.module.saveSemanticEmbedding(epochs)
+
     def saveSemanticPoints(self,train_steps):
         if self.opt.gpu_ids:
             if self.opt.useParallel:
@@ -440,6 +449,7 @@ class NeuralPointsRayMarching(nn.Module):
 
             self.predictDict.bpnet_points_label = bpnet_points_label.detach()
             self.predictDict.locs_in = locs_in
+            self.predictDict.bpnet_points_embedding = bpnet_points_embedding
 
             # if save_label_switch:
             #     savedata = np.concatenate((locs_in,bpnet_points_label[...,None].cpu().numpy()),axis=-1)
@@ -598,6 +608,13 @@ class NeuralPointsRayMarching(nn.Module):
 
         return output
     
+
+    def saveSemanticEmbedding(self,epoch):
+        
+        save_filename = '{}_semanticEmbedding.pth'.format(epoch)
+        save_path = os.path.join(self.save_dir, save_filename)
+        np.savetxt( save_path,self.predictDict.bpnet_points_embedding,fmt="%f" )
+
     def saveSemanticPoints(self,train_steps):
 
         locs_in = self.predictDict.locs_in

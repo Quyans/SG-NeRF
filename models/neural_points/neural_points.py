@@ -386,7 +386,6 @@ class NeuralPoints(nn.Module):
                 #     points_conf = torch.ones_like(points_conf) * self.opt.default_conf
                 # self.points_conf = nn.Parameter(points_conf) if points_conf is not None else None
                 self.points_conf = nn.Parameter(saved_features["neural_points.points_conf"]) if "neural_points.points_conf" in saved_features else None
-                # print("self.points_conf",self.points_conf)
 
                 self.points_dir = nn.Parameter(saved_features["neural_points.points_dir"]) if "neural_points.points_dir" in saved_features else None # None
                 self.points_color = nn.Parameter(saved_features["neural_points.points_color"]) if "neural_points.points_color" in saved_features else None # None
@@ -664,6 +663,7 @@ class NeuralPoints(nn.Module):
         self.points_label = points_label[...,None]    #[122598,1]
         if bpnet_points_embedding is not None:
             self.bpnet_points_embedding = bpnet_points_embedding[None,...]
+        # print(5)
 
     def editing_set_points(self, points_xyz, points_embeding, points_color=None, points_dir=None, points_conf=None,
                    parameter=False, Rw2c=None, eulers=None):
