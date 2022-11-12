@@ -4,7 +4,7 @@
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
 # name='scene024102_Semantic_step50_debug2'
-name='scene046_00_Semantic_640480step50_block2bpnet_'
+name='scene046_00_Semantic_640480step50_block2bpnet_laybpnet=1'
 
 resume_iter=best #latest
 
@@ -123,13 +123,13 @@ lr_policy="iter_exponential_decay"
 lr_decay_iters=1000000
 lr_decay_exp=0.1
 
-gpu_ids='0'
+gpu_ids='1'
 checkpoints_dir="${nrCheckpoint}/scannet/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
 save_predict_label=1 
-save_label_iter=1000 #预测一次
-save_iter_freq=1000
+save_label_iter=5000 #预测一次
+save_iter_freq=5000
 save_point_freq=10000 #301840 #1
 maximum_step=400000 #500000 #250000 #800000
 
