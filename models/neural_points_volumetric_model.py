@@ -631,7 +631,7 @@ class NeuralPointsRayMarching(nn.Module):
     def saveSemanticEmbedding(self,epoch):
         
         save_filename = '{}_semanticEmbedding.pth'.format(epoch)
-        save_path = os.path.join(self.save_dir, save_filename)
+        save_path = os.path.join(self.opt.save_dir, save_filename)
         np.savetxt( save_path,self.predictDict.bpnet_points_embedding,fmt="%f" )
 
     def saveSemanticPoints(self,train_steps):
