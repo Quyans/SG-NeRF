@@ -15,7 +15,7 @@ from asyncio.log import logger
 import random
 import imageio
 import math
-
+from torchvision import transforms
 # 可视化
 # from torch.utils.tensorboard import SummaryWriter
 # from collections import namedtuple
@@ -447,9 +447,28 @@ class NeuralPointsRayMarching(nn.Module):
             # bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in)
             bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in,train_id_paths,image_path)
 
+             # 看一下2D的效果
+            if isinstance(image_path,list):
+                image_path = image_path[0]
+            else:
+                image_path = image_path
+            imgNum = image_path.split("/")[-1].split(".")[0]
+
+
+            savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name,"pred_2d/") 
+            if not os.path.exists(savePath):
+                os.mkdir(savePath)           
+            # save_p = "/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/checkpoints/scannet/scene024102_Semantic_640480step5_feats2one_withSemanticEmbedding_block2bpnet_/test_pred2d/"
+            pre2dImg = transforms.ToPILImage()(bpnet_pixel_label.float())
+            Image.Image.save(pre2dImg,os.path.join(savePath,"{}_pred.jpg".format(imgNum)))
+            gt_path = image_path.replace("color","label").replace("jpg","png")
+            Image.Image.save(Image.open(gt_path),os.path.join(savePath,"{}_gt.jpg".format(imgNum)))
+            
+            bpnet_pixel_label = bpnet_pixel_label[None,...,None]
+
             self.predictDict.bpnet_points_label = bpnet_points_label.detach()
             self.predictDict.locs_in = locs_in
-            self.predictDict.bpnet_points_embedding = bpnet_points_embedding
+            self.predictDict.bpnet_points_embedding = bpnet_points_embedding.detach()
 
             # if save_label_switch:
             #     savedata = np.concatenate((locs_in,bpnet_points_label[...,None].cpu().numpy()),axis=-1)

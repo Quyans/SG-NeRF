@@ -248,24 +248,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
                 for i in range(total_steps):
                     scheduler.step()
     
-    def save_networks(self, epoch, other_states={}, back_gpu=True):
-        for name, net in zip(self.model_names, self.get_networks()):
-            save_filename = '{}_net_{}.pth'.format(epoch, name)
-            save_path = os.path.join(self.save_dir, save_filename)
-
-            try:
-                if isinstance(net, nn.DataParallel):
-                    net = net.module
-                net.cpu()
-                torch.save(net.state_dict(), save_path)
-                if back_gpu:
-                    net.cuda()
-            except Exception as e:
-                print("savenet:", e)
-
-        save_filename = '{}_states.pth'.format(epoch)
-        save_path = os.path.join(self.save_dir, save_filename)
-        torch.save(other_states, save_path)
+   
 
     def gen_points(self):
         cam_xyz_lst, photometric_confidence_lst, point_mask_lst, HDWD, data_mvs, intrinsics_lst, extrinsics_lst = self.net_mvs.gen_points(self.input)
