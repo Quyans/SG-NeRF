@@ -314,10 +314,12 @@ class ScannetFtDataset(BaseDataset):
                 self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
                 self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
             else:  # nsvf configuration
-                step=5#5
+                step=1#5
                 self.train_id_list = self.all_id_list[::step]
-                # self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
-                self.test_id_list = [0,300,400]
+                # self.train_id_list = [200,700,1200]
+
+                self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+                # self.test_id_list = [0,300,400]
         else:
             #assert self.split == "test", 'split==train! error!cant train at new camera trajectory'
             print("Novel camera trajectory rendering")
@@ -611,10 +613,17 @@ class ScannetFtDataset(BaseDataset):
         '''
         semantic itm
         '''
-        semantic_path = os.path.join(self.data_dir, self.scan, "label-filt/{}.png".format(vid))
+        semantic_path = os.path.join(self.data_dir, self.scan,  "exported/label/{}.png".format(vid))
         gt_semantic_img = Image.open(semantic_path).convert(mode='I')
+    
+        
         gt_semantic_img = gt_semantic_img.resize(self.img_wh, Image.NEAREST)
         gt_semantic_img = self.transform(gt_semantic_img)  # (batch, h, w)
+        # gt_semantic_img[gt_semantic_img == -100] = 255 # 3Dneed this 
+        self.remapper = np.ones(256) * 255
+        for i, x in enumerate([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 24, 28, 33, 34, 36, 39]):
+            self.remapper[x] = i
+        gt_semantic_img = self.remapper[gt_semantic_img]
 
         item["image_path"] = image_path
         item["intrinsic"] = intrinsic
@@ -675,7 +684,8 @@ class ScannetFtDataset(BaseDataset):
         item["pixel_idx"] = pixelcoords
         gt_image = gt_image[py.astype(np.int32), px.astype(np.int32)]
         gt_semantic_image = gt_semantic_img[py.astype(np.int32), px.astype(np.int32)]
-        # item["pixel_label"] = gt_semantic_image
+        item["pixel_label"] = gt_semantic_image
+        item["gt_semantic_img"] = gt_semantic_img
         
         raydir = get_dtu_raydir(pixelcoords, item["intrinsic"], camrot, self.opt.dir_norm > 0)
         # raylabel = gt_semantic_image #[32,32,1]

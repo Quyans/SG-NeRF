@@ -137,8 +137,8 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
                     self.optimizer.step()
                 if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 1:
                     self.neural_point_optimizer.step()
-                if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 2:
-                    self.bpnet_optimizer.step()
+                # if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 2:
+                #     self.bpnet_optimizer.step()
 
 
     def forward(self):
