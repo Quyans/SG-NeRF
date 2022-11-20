@@ -286,6 +286,7 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
             # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
             # self.bpnetmodel = self.bpnetmodel.to(device)
+        # bpnet.training = False
         return bpnet
 
     def setup_optimizer(self, opt):
@@ -458,6 +459,8 @@ class NeuralPointsRayMarching(nn.Module):
             bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding,labels2d_gt = self.bpnet.train_bpnet(locs_in,feats_in,train_id_paths,image_path,intrinsicToBpnet)
             bpnet_pixel_label = bpnet_pixel_label[0,:,:,0][None,...,None]
             
+            import copy
+            savePixelLabel = copy.deepcopy(bpnet_pixel_label.detach()) 
              # 看一下2D的效果
             if isinstance(image_path,list):
                 image_path = image_path[0]
@@ -480,12 +483,13 @@ class NeuralPointsRayMarching(nn.Module):
             
             # pixel_label
 
+        
             savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name,"pred_2d/") 
             if not os.path.exists(savePath):
                 os.mkdir(savePath)           
             # save_p = "/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/checkpoints/scannet/scene024102_Semantic_640480step5_feats2one_withSemanticEmbedding_block2bpnet_/test_pred2d/"
             
-            pred2d = bpnet_pixel_label[0,...,0].cpu().numpy()  #[H,W,C]
+            pred2d = savePixelLabel[0,...,0].cpu().numpy()  #[H,W,C]
             # pre2dImg = transforms.ToPILImage()(bpnet_pixel_label.float())
             # Image.Image.save(pre2dImg,os.path.join(savePath,"{}_pred.jpg".format(imgNum)))
             
@@ -510,11 +514,13 @@ class NeuralPointsRayMarching(nn.Module):
                 gt2dmat.append(tem)
             gt2dImg = transforms.ToPILImage()(torch.tensor(gt2dmat).permute(2,0,1).float())
             Image.Image.save(gt2dImg,os.path.join(savePath,"{}_view_gt.jpg".format(imgNum)))
+            
+
 
             self.predictDict.bpnet_points_label = bpnet_points_label.detach().cpu()
             self.predictDict.locs_in = locs_in
             self.predictDict.bpnet_points_embedding = bpnet_points_embedding.detach().cpu()
-
+            
 
             # 处理平铺展开
             # 处理成1 32 32 1的label

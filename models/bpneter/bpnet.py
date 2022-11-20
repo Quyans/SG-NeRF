@@ -92,11 +92,19 @@ def adjust_intrinsic(intrinsic, intrinsic_image_dim, image_dim):
     return intrinsic
 class LinkCreator(object):
     def __init__(self, fx=577.870605, fy=577.870605, mx=319.5, my=239.5, image_dim=(320, 240), voxelSize=0.05):
-    # def __init__(self, fx=2000.870605, fy=2000.870605, mx=160, my=120, image_dim=(320, 240), voxelSize=0.05):
+    # # def __init__(self, fx=2000.870605, fy=2000.870605, mx=160, my=120, image_dim=(320, 240), voxelSize=0.05):
         self.intricsic = make_intrinsic(fx=fx, fy=fy, mx=mx, my=my)
-        self.intricsic = adjust_intrinsic(self.intricsic, intrinsic_image_dim=[640, 480], image_dim=image_dim)
+        self.intricsic = adjust_intrinsic(self.intricsic, intrinsic_image_dim=(320, 240), image_dim=image_dim)
         self.imageDim = image_dim
         self.voxel_size = voxelSize
+
+    # def __init__(self, fx=1170.187988, fy=1170.187988, mx=647.75, my=483.75, image_dim=(320, 240), voxelSize=0.05):
+    # # # def __init__(self, fx=2000.870605, fy=2000.870605, mx=160, my=120, image_dim=(320, 240), voxelSize=0.05):
+    #     self.intricsic = make_intrinsic(fx=fx, fy=fy, mx=mx, my=my)
+    #     self.intricsic = adjust_intrinsic(self.intricsic, intrinsic_image_dim=(1296, 968), image_dim=image_dim)
+    #     self.imageDim = image_dim
+    #     self.voxel_size = voxelSize
+
 
     # def __init__(self, intrisic, image_dim=(320, 240), voxelSize=0.05):
     #     self.intricsic = intrisic  #[4*4]
@@ -134,6 +142,8 @@ class BPNet(nn.Module):
 
     def __init__(self, cfg=None):
         super(BPNet, self).__init__()
+
+        self.cfg = cfg
         self.viewNum = cfg.viewNum
 
         self.voxelSize = 0.05
@@ -150,7 +160,7 @@ class BPNet(nn.Module):
         # self.IMG_DIM = (320, 240)
 
         # 原本 use_augmentation = true
-        self.IMG_DIM = cfg.img_wh
+        self.IMG_DIM = tuple(cfg.img_wh)
         self.voxelizer = Voxelizer(
             voxel_size=self.voxelSize,
             clip_bound=None,
@@ -167,6 +177,9 @@ class BPNet(nn.Module):
         # for i, x in enumerate([0,1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,13,14,15,16,17,18,19]):
         #     self.remapper[x] = i
         
+        # self.linkCreator = LinkCreator(image_dim=self.IMG_DIM, voxelSize=self.voxelSize)
+        self.linkCreator = LinkCreator(voxelSize=self.voxelSize)
+        # self.linkCreator = LinkCreator(intrisic,image_dim=self.IMG_DIM, voxelSize=self.voxelSize)
         
          # 2D AUG
         value_scale = 255
@@ -176,7 +189,7 @@ class BPNet(nn.Module):
         std = [item * value_scale for item in std]
 
         self.aug = cfg.aug
-        if self.aug:
+        if self.aug:#false
             self.transform_2d = t_2d.Compose([
                 t_2d.RandomGaussianBlur(),
                 t_2d.Crop([self.IMG_DIM[1] + 1, self.IMG_DIM[0] + 1], crop_type='rand', padding=mean,
@@ -378,7 +391,6 @@ class BPNet(nn.Module):
         
         imgs, labels, links = [], [], []
         for v in range(self.viewNum):
-
             # 这里三个f都是同一个文件
             if isinstance(image_path,list):
                 image_pa = image_path[0]
@@ -478,13 +490,6 @@ class BPNet(nn.Module):
 
     # def train_bpnet(self,locs_in,feats_in):
     def train_bpnet(self,locs_in,feats_in,train_id_paths,image_path,intrisic):
-        
-        # colors, links = self.get_2d(locs_in)
-
-        # self.linkCreator = LinkCreator(image_dim=self.IMG_DIM, voxelSize=self.voxelSize)
-        self.linkCreator = LinkCreator(voxelSize=self.voxelSize)
-        # self.linkCreator = LinkCreator(intrisic,image_dim=self.IMG_DIM, voxelSize=self.voxelSize)
-
 
         # 将训练集按照viewnum均分
         frames_path = train_id_paths[0]
@@ -535,13 +540,73 @@ class BPNet(nn.Module):
         # output_3d = output_3d.resize(output_3d.shape[0],1).cpu().numpy() #将数据从 [125988] -> [125988,1]
         output_2d = output_2d.detach().max(1)[1] #【B，H,W，V】[1,480,640,3]
 
+
+        """
+        # colordict = {
+        #     0:[174,198,232],  # wall  浅蓝
+        #     1:[151,223,137],  #floor  浅绿
+        #     2:[31,120,180],   #cabinet 深蓝
+        #     3:[255,188,120],  #bed  橘黄
+        #     4:[188,189,35],   #chair 黄绿
+        #     5:[140,86,74],    #sofa    红棕色
+        #     6:[255,152,151],  #table  肉粉
+        #     7:[213,39,40],    #door  大红
+        #     8:[196,176,213],  # window 浅紫色
+        #     9:[148,103,188],  #bookshelf 紫色
+        #     10:[196,156,148], #picture painting 粉紫色
+        #     11:[23,190,208],  #counter  浅蓝色
+        #     12:[247,183,210], #desk 粉色
+        #     13:[218,219,141], #curtain  浅黄绿
+        #     14:[254,127,14],  #refrigerator 橘色
+        #     15:[227,119,194], # shower curtain 粉紫色
+        #     16:[158,218,229], # toilet uninal  淡白蓝色
+        #     17:[43,160,45],   # sink  绿色
+        #     18:[112,128,144], #bath tub 蓝灰色
+        #     19:[82,83,163],   # closet piano piano bench  深紫色
+        #     255:[255,255,170]    # 浅黄色
+        # }
+        
+        # savePath = os.path.join(self.cfg.checkpoints_dir,self.cfg.name,"pred_2d/") 
+        # if not os.path.exists(savePath):
+        #     os.mkdir(savePath)           
+        # # save_p = "/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/checkpoints/scannet/scene024102_Semantic_640480step5_feats2one_withSemanticEmbedding_block2bpnet_/test_pred2d/"
+        
+        # pred2d = output_2d[0,...,0].cpu().numpy()  #[H,W,C]
+        # # pre2dImg = transforms.ToPILImage()(bpnet_pixel_label.float())
+        # # Image.Image.save(pre2dImg,os.path.join(savePath,"{}_pred.jpg".format(imgNum)))
+        
+        # # gt_path = image_path.replace("color","label").replace("jpg","png")
+        # # Image.Image.save(Image.open(gt_path),os.path.join(savePath,"{}_gt.jpg".format(imgNum)))
+        # if isinstance(image_path,list):
+        #     image_path = image_path[0]
+        # else:
+        #     image_path = image_path
+        # imgNum = image_path.split("/")[-1].split(".")[0]
+
+
+        # pre2dmat = []
+        # for row in  pred2d:
+        #     tem = []
+        #     for label in row:
+        #         tem.append(np.array(colordict[label])/255)
+        #     pre2dmat.append(tem)
+        # pre2dImg = transforms.ToPILImage()(torch.tensor(pre2dmat).permute(2,0,1).float())
+        # Image.Image.save(pre2dImg,os.path.join(savePath,"{}_view_pred.jpg".format(imgNum)))
+
+        # labels2d_gt = labels2d_gt[0]
+        # gt2dmat = []
+        # for row in  labels2d_gt:
+        #     tem = []
+        #     for label in row:
+        #         tem.append(np.array(colordict[label])/255)
+        #     gt2dmat.append(tem)
+        # gt2dImg = transforms.ToPILImage()(torch.tensor(gt2dmat).permute(2,0,1).float())
+        # Image.Image.save(gt2dImg,os.path.join(savePath,"{}_view_gt.jpg".format(imgNum)))
+        """
         # 返回第一张的图片
         
         # output_2d = output_2d[0,:,:,0]
-
-
-        # pre2dImg.save(save_p,"JPG")
-        # pre2dImg.show()
+        
 
         # 返回的output_2d 应该是[240,320,1 ] 
         # output_3d  [122598]  0~19
