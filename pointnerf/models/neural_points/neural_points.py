@@ -12,6 +12,11 @@ class NeuralPoints(nn.Module):
 
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
+        parser.add_argument('--semantic_guidance',
+                            type=int,
+                            default=0,
+                            help='If 0:use default K-means sampler;If 1:use semantic guidance sampler')
+
         parser.add_argument('--load_points',
                             type=int,
                             default=0,
