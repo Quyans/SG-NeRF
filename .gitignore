@@ -132,5 +132,8 @@ viewer/testData
 /dev_scripts
 
 
-/my_log
+/data_src
 /bpNetInitmodel/
+
+/pointnerf/data_src
+/pointnerf/checkpoints
