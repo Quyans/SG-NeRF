@@ -222,6 +222,13 @@ class PointAggregator(torch.nn.Module):
             # default="LeakyReLU",
             help='1 to use softplus and widden sigmoid for last activation')
 
+        parser.add_argument('--predict_semantic',
+                            type=int,
+                            default=0,
+                            help='if 0:donot use BPNet to predict semantic;1 use BPNet to predict semantic label')
+        
+       
+
     def __init__(self, opt):
 
         super(PointAggregator, self).__init__()

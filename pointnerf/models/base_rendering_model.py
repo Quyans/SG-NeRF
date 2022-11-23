@@ -223,6 +223,7 @@ class BaseRenderingModel(BaseModel):
 
         self.loss_names = ['total']
         if not opt.color_loss_items:
+            print("*****fuck!!!")
             self.add_default_color_losses(opt)
         if len(opt.color_loss_weights) != 1 and len(
                 opt.color_loss_weights) != len(opt.color_loss_items):

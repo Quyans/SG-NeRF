@@ -79,6 +79,8 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
 
 
     def add_default_color_losses(self, opt):
+        print(len(self.opt.color_loss_items))
+        print((self.opt.color_loss_items))
         if "coarse_raycolor" not in opt.color_loss_items:
             opt.color_loss_items.append('coarse_raycolor')
         if opt.fine_sample_num > 0:
