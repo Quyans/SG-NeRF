@@ -858,13 +858,13 @@ def main():
             model.train()
             exit()
 
-    if total_steps == 0 and (len(train_dataset.id_list) > 30 or len(train_dataset.view_id_list)  > 30):
-        other_states = {
-            'epoch_count': 0,
-            'total_steps': total_steps,
-        }
-        model.save_networks(total_steps, other_states)
-        visualizer.print_details('saving model ({}, epoch {}, total_steps {})'.format(opt.name, 0, total_steps))
+    # if total_steps == 0 and (len(train_dataset.id_list) > 30 or len(train_dataset.view_id_list)  > 30):
+    #     other_states = {
+    #         'epoch_count': 0,
+    #         'total_steps': total_steps,
+    #     }
+    #     model.save_networks(total_steps, other_states)
+    #     visualizer.print_details('saving model ({}, epoch {}, total_steps {})'.format(opt.name, 0, total_steps))
 
     real_start=total_steps
     train_random_sample_size = opt.random_sample_size
@@ -1003,10 +1003,8 @@ def main():
                 visualizer.save_neural_points(total_steps, model.neural_points.xyz, model.neural_points.points_embeding, data, save_ref=opt.load_points==0)
                 visualizer.print_details('saving neural points at total_steps {})'.format(total_steps))
             
-
-                
             try:
-                if total_steps == 10000 or (total_steps % opt.save_iter_freq == 0 and total_steps > 0):
+                if total_steps == 1 or (total_steps % opt.save_iter_freq == 0 and total_steps > 0):
                     # 存bpnet预测的点云embedding
                     model.saveSemanticEmbedding(total_steps)
                     # 存参数

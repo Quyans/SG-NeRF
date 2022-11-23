@@ -231,6 +231,14 @@ class NeuralPoints(nn.Module):
             help=
             'vscale is the block size that store several voxels'
         )
+        
+        parser.add_argument(
+            '--bp_embedding_grad',
+            type=int,
+            default=0,
+            help=
+            'default not to grad the bpnet_points_label_embedding'
+        )
 
         parser.add_argument(
             '--dir_grad',
@@ -328,7 +336,7 @@ class NeuralPoints(nn.Module):
 
         self.opt = opt
         self.grid_vox_sz = 0
-        self.points_conf, self.points_dir, self.points_color, self.eulers, self.Rw2c,self.points_label,self.points_feats = None, None, None, None, None,None,None
+        self.bpnet_points_embedding,self.points_conf, self.points_dir, self.points_color, self.eulers, self.Rw2c,self.points_label,self.points_feats =None, None, None, None, None, None,None,None
         self.device=device
         if self.opt.load_points ==1:#初始化时候没有，如果在pth里就有
             saved_features = None
@@ -391,6 +399,8 @@ class NeuralPoints(nn.Module):
                 self.points_color = nn.Parameter(saved_features["neural_points.points_color"]) if "neural_points.points_color" in saved_features else None # None
                 self.eulers = nn.Parameter(saved_features["neural_points.eulers"]) if "neural_points.eulers" in saved_features else None
                 self.Rw2c = nn.Parameter(saved_features["neural_points.Rw2c"]) if "neural_points.Rw2c" in saved_features else torch.eye(3, device=self.xyz.device, dtype=self.xyz.dtype)
+
+                self.bpnet_points_embedding = nn.Parameter(saved_features["neural_points.bpnet_points_embedding"]) if "neural_points.bpnet_points_embedding" in saved_features else None
             else:
                 if feature_init_method == 'rand':
                     points_embeding = torch.rand(shape, device=device, dtype=torch.float32) - 0.5
@@ -428,6 +438,8 @@ class NeuralPoints(nn.Module):
                 self.eulers.requires_grad = False
             if self.Rw2c is not None:
                 self.Rw2c.requires_grad = False#NNO
+            if self.bpnet_points_embedding is not None:
+               self.bpnet_points_embedding.requires_grad = opt.bp_embedding_grad>0 
 
         self.reg_weight = reg_weight
         self.opt.query_size = self.opt.kernel_size if self.opt.query_size[0] == 0 else self.opt.query_size
@@ -661,8 +673,14 @@ class NeuralPoints(nn.Module):
     def set_bpnet_feats(self,points_label_prob,points_label,bpnet_points_embedding):
         self.points_label_prob = points_label_prob
         self.points_label = points_label[...,None]    #[122598,1]
-        if bpnet_points_embedding is not None:
-            self.bpnet_points_embedding = bpnet_points_embedding[None,...]
+
+        # 只设置一次
+        if bpnet_points_embedding is not None and self.bpnet_points_embedding is None:
+            bp_points_embedding = nn.Parameter(bpnet_points_embedding[None,...])
+            bp_points_embedding.requires_grad = self.opt.bp_embedding_grad > 0
+            self.bpnet_points_embedding = bp_points_embedding
+
+            # self.bpnet_points_embedding = bpnet_points_embedding[None,...]
         # print(5)
 
     def editing_set_points(self, points_xyz, points_embeding, points_color=None, points_dir=None, points_conf=None,
@@ -934,55 +952,6 @@ class NeuralPoints(nn.Module):
         input = self.pointuniform(torch.cat([input,input], dim=0), std)
         return input
 
-    # def get_2d(self,train_id_paths, coords: np.ndarray):
-    #     """
-    #     :param      coords: Nx3
-    #     :return:    imgs:   CxHxWxV Tensor
-    #                 labels: HxWxV Tensor
-    #                 links: Nx4xV(1,H,W,mask) Tensor
-    #     """f
-    #     # 默认为False
-    #     self.val_benchmark = False
-    #     frames_path = train_id_paths[0]
-    #     #frames_path 是這個場景的训练集所有图片 对于scannet241是100帧
-    #     # print(room_id)
-    #     partial = int(len(frames_path) / self.VIEW_NUM)
-    #     imgs, labels, links = [], [], []
-    #     for v in range(self.VIEW_NUM):
-    #         if not self.val_benchmark:
-    #             f = random.sample(frames_path[v * partial:v * partial + partial], k=1)[0][0]
-    #         else:
-    #             select_id = (v * partial+self.offset) % len(frames_path)
-    #             # select_id = (v * partial+partial//2)
-    #             f = frames_path[select_id]
-    #         # pdb.set_trace()
-    #         img = imageio.imread(f)
-    #         label = imageio.imread(f.replace('color', 'label').replace('jpg', 'png'))
-            
-    #         # label = self.remapper[label] # 这里可以不用搞因为这里的语义label都已经处理过了，如果没有处理过需要用到这里
-            
-    #         depth = imageio.imread(f.replace('color', 'depth').replace('jpg', 'png')) / 1000.0  # convert to meter
-    #         posePath = f.replace('color', 'pose').replace('.jpg', '.txt')
-    #         pose = np.asarray(
-    #             [[float(x[0]), float(x[1]), float(x[2]), float(x[3])] for x in
-    #              (x.split(" ") for x in open(posePath).read().splitlines())]
-    #         )
-    #         # pdb.set_trace()
-    #         link = np.ones([coords.shape[0], 4], dtype=np.int)
-    #         link[:, 1:4] = self.linkCreator.computeLinking(pose, coords, depth)
-    #         temimg = img
-    #         temlabel =label
-    #         img = self.transform_2d(img)
-    #         imgs.append(img)
-    #         # labels.append(label)
-    #         links.append(link)
-
-    #     imgs = torch.stack(imgs, dim=-1)
-    #     # labels = torch.stack(labels, dim=-1)
-    #     links = np.stack(links, axis=-1)
-    #     links = torch.from_numpy(links)
-    #     return imgs, links
-
     def getPointsData(self):
         locs_in = self.xyz.data.cpu().numpy().copy()
         feats_in = self.points_feats.data.cpu().numpy().copy()
@@ -1019,10 +988,8 @@ class NeuralPoints(nn.Module):
         # sampled_label=None
         sampled_label_embedding = None
         if self.opt.semantic_guidance==1:
-            bpnet_points_embedding = torch.index_select(self.bpnet_points_embedding, 1, sample_pidx).view(B, R, SR, K, self.bpnet_points_embedding.shape[2])
+            sampled_label_embedding = torch.index_select(self.bpnet_points_embedding, 1, sample_pidx).view(B, R, SR, K, self.bpnet_points_embedding.shape[2])
             # sampled_label = None if self.points_label[None,...] is None else torch.index_select(self.points_label[None,...], 1, sample_pidx).view(B, R, SR, K, self.points_label[None,...].shape[2])
-
-
 
 
         #[3,3]-ones(3,3)
@@ -1037,4 +1004,4 @@ class NeuralPoints(nn.Module):
         # if self.points_embeding.grad is not None:
         #     print("points_embeding grad:", self.points_embeding.requires_grad, torch.max(self.points_embeding.grad))
         # print("points_embeding 3", torch.max(self.points_embeding), torch.min(self.points_embeding))
-        return sampled_color,bpnet_points_embedding,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding[..., 6:], sampled_embedding[..., 3:6], sampled_embedding[..., :3], sample_pnt_mask, sample_loc, sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize, self.grid_vox_sz
+        return sampled_color,sampled_label_embedding,sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding[..., 6:], sampled_embedding[..., 3:6], sampled_embedding[..., :3], sample_pnt_mask, sample_loc, sample_loc_w_tensor, sample_ray_dirs_tensor, ray_mask_tensor, vsize, self.grid_vox_sz

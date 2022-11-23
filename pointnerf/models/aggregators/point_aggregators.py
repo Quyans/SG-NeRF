@@ -99,6 +99,12 @@ class PointAggregator(torch.nn.Module):
             type=int,
             default=0,
             help='interp to agged features mlp num')
+        
+        parser.add_argument(
+            '--shading_feature_mlp_layer2_bpnet',
+            type=int,
+            default=0,
+            help='interp to agged features bpnet')
 
         parser.add_argument(
             '--shading_feature_mlp_layer3',
@@ -495,7 +501,7 @@ class PointAggregator(torch.nn.Module):
         return weights, embedding[..., 7:]
 
 
-    def viewmlp(self,sampled_label_embedding, sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight, pnt_mask_flat, pts, viewdirs, total_len, ray_valid, in_shape, dists):
+    def viewmlp(self, sampled_color,sampled_label_embedding, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight, pnt_mask_flat, pts, viewdirs, total_len, ray_valid, in_shape, dists):
         # print("sampled_Rw2c", sampled_Rw2c.shape, sampled_xyz.shape)
         # assert sampled_Rw2c.dim() == 2
         B, R, SR, K, _ = dists.shape
