@@ -13,6 +13,7 @@ from .unet_3d import mink_unet as model3D
 import MinkowskiEngine as ME
 from .bpm import Linking
 
+import os
 
 # bpnet 
 from MinkowskiEngine import SparseTensor, CoordsManager
@@ -23,6 +24,8 @@ import random
 import imageio
 import math
 from PIL import Image
+
+from torchvision import transforms
 
 def state_dict_remove_moudle(state_dict):
     new_state_dict = OrderedDict()
@@ -44,6 +47,30 @@ def constructor2d(**kwargs):
     # model = model.cuda()
     return model
 
+
+colordict = {
+    0:[174,198,232],
+    1:[151,223,137],
+    2:[31,120,180],
+    3:[255,188,120],
+    4:[188,189,35],
+    5:[140,86,74],
+    6:[255,152,151],
+    7:[213,39,40],
+    8:[196,176,213],
+    9:[148,103,188],
+    10:[196,156,148],
+    11:[23,190,208],
+    12:[247,183,210],
+    13:[218,219,141],
+    14:[254,127,14],
+    15:[227,119,194],
+    16:[158,218,229],
+    17:[43,160,45],
+    18:[112,128,144],
+    19:[82,83,163],
+    255:[255,255,170]    
+}
 
 # create camera intrinsics
 def make_intrinsic(fx, fy, mx, my):
@@ -394,7 +421,9 @@ class BPNet(nn.Module):
                 # select_id = (v * partial+partial//2)
                 # f = frames_path[select_id]
             # pdb.set_trace()
-            imgio = imageio.imread(image_pa)
+            # imgio = imageio.imread(image_pa)
+
+            image_pa = f
             img = Image.open(image_pa)
             img = img.resize(self.IMG_DIM, Image.NEAREST)
             img = np.array(img, dtype='float32')
@@ -466,9 +495,12 @@ class BPNet(nn.Module):
         point_inside_feat = point_inside_feat_ST.F[inds_reconstruct,:]
         output_3d = output_3d_prob.detach().max(1)[1]
         # output_3d = output_3d.resize(output_3d.shape[0],1).cpu().numpy() #将数据从 [125988] -> [125988,1]
-        output_2d = output_2d.detach().max(1)[1]
+        output_2d = output_2d.detach().max(1)[1] #【B，H,W，V】[1,480,640,3]
+
+        # 返回第一张的图片
         output_2d = output_2d[0,:,:,0]
-        output_2d = output_2d.reshape(1,self.IMG_DIM[1],self.IMG_DIM[0],1)
+        # pre2dImg.save(save_p,"JPG")
+        # pre2dImg.show()
 
         # 返回的output_2d 应该是[240,320,1 ] 
         # output_3d  [122598]  0~19

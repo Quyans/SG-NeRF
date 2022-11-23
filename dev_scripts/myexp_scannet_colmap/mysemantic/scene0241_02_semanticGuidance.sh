@@ -3,7 +3,7 @@
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
 # name='scene024102_Semantic_step50_debug2'
-name="scene0241_02_Semantic_640480step5_feats2one_withSemanticEmbedding_block2bpnet_layer1=1_"
+name="scene24102_3View"
 
 
 resume_iter=best #latest
