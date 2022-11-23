@@ -49,29 +49,28 @@ def constructor2d(**kwargs):
 
 
 colordict = {
-    0:[174,198,232],
-    1:[151,223,137],
-    2:[31,120,180],
-    3:[255,188,120],
-    4:[188,189,35],
-    5:[140,86,74],
-    6:[255,152,151],
-    7:[213,39,40],
-    8:[196,176,213],
-    9:[148,103,188],
-    10:[196,156,148],
-    11:[23,190,208],
-    12:[247,183,210],
-    13:[218,219,141],
-    14:[254,127,14],
-    15:[227,119,194],
-    16:[158,218,229],
-    17:[43,160,45],
-    18:[112,128,144],
-    19:[82,83,163],
-    255:[255,255,170]    
+    0:[174,198,232],  # wall  浅蓝
+    1:[151,223,137],  #floor  浅绿
+    2:[31,120,180],   #cabinet 深蓝
+    3:[255,188,120],  #bed  橘黄
+    4:[188,189,35],   #chair 黄绿
+    5:[140,86,74],    #sofa    红棕色
+    6:[255,152,151],  #table  肉粉
+    7:[213,39,40],    #door  大红
+    8:[196,176,213],  # window 浅紫色
+    9:[148,103,188],  #bookshelf 紫色
+    10:[196,156,148], #picture painting 粉紫色
+    11:[23,190,208],  #counter  浅蓝色
+    12:[247,183,210], #desk 粉色
+    13:[218,219,141], #curtain  浅黄绿
+    14:[254,127,14],  #refrigerator 橘色
+    15:[227,119,194], # shower curtain 粉紫色
+    16:[158,218,229], # toilet uninal  淡蓝色
+    17:[43,160,45],   # sink  绿色
+    18:[112,128,144], #bath tub 蓝灰色
+    19:[82,83,163],   # closet piano piano bench  深紫色
+    255:[255,255,170]    # 浅黄色
 }
-
 # create camera intrinsics
 def make_intrinsic(fx, fy, mx, my):
     intrinsic = np.eye(4)
@@ -93,10 +92,24 @@ def adjust_intrinsic(intrinsic, intrinsic_image_dim, image_dim):
     return intrinsic
 class LinkCreator(object):
     def __init__(self, fx=577.870605, fy=577.870605, mx=319.5, my=239.5, image_dim=(320, 240), voxelSize=0.05):
+    # # def __init__(self, fx=2000.870605, fy=2000.870605, mx=160, my=120, image_dim=(320, 240), voxelSize=0.05):
         self.intricsic = make_intrinsic(fx=fx, fy=fy, mx=mx, my=my)
-        self.intricsic = adjust_intrinsic(self.intricsic, intrinsic_image_dim=[640, 480], image_dim=image_dim)
+        self.intricsic = adjust_intrinsic(self.intricsic, intrinsic_image_dim=(320, 240), image_dim=image_dim)
         self.imageDim = image_dim
         self.voxel_size = voxelSize
+
+    # def __init__(self, fx=1170.187988, fy=1170.187988, mx=647.75, my=483.75, image_dim=(320, 240), voxelSize=0.05):
+    # # # def __init__(self, fx=2000.870605, fy=2000.870605, mx=160, my=120, image_dim=(320, 240), voxelSize=0.05):
+    #     self.intricsic = make_intrinsic(fx=fx, fy=fy, mx=mx, my=my)
+    #     self.intricsic = adjust_intrinsic(self.intricsic, intrinsic_image_dim=(1296, 968), image_dim=image_dim)
+    #     self.imageDim = image_dim
+    #     self.voxel_size = voxelSize
+
+
+    # def __init__(self, intrisic, image_dim=(320, 240), voxelSize=0.05):
+    #     self.intricsic = intrisic  #[4*4]
+    #     self.imageDim = image_dim
+    #     self.voxel_size = voxelSize
 
     def computeLinking(self, camera_to_world, coords, depth):
         """
@@ -129,9 +142,11 @@ class BPNet(nn.Module):
 
     def __init__(self, cfg=None):
         super(BPNet, self).__init__()
+
+        self.cfg = cfg
         self.viewNum = cfg.viewNum
 
-        voxelSize = 0.05
+        self.voxelSize = 0.05
         self.SCALE_AUGMENTATION_BOUND = (0.9, 1.1)
         self.ROTATION_AUGMENTATION_BOUND = ((-np.pi / 64, np.pi / 64), (-np.pi / 64, np.pi / 64), (-np.pi,
                                                                                             np.pi))
@@ -145,9 +160,9 @@ class BPNet(nn.Module):
         # self.IMG_DIM = (320, 240)
 
         # 原本 use_augmentation = true
-        self.IMG_DIM = cfg.img_wh
+        self.IMG_DIM = tuple(cfg.img_wh)
         self.voxelizer = Voxelizer(
-            voxel_size=voxelSize,
+            voxel_size=self.voxelSize,
             clip_bound=None,
             use_augmentation=False,
             scale_augmentation_bound=self.SCALE_AUGMENTATION_BOUND,
@@ -159,7 +174,12 @@ class BPNet(nn.Module):
         self.remapper = np.ones(256) * 255
         for i, x in enumerate([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 24, 28, 33, 34, 36, 39]):
             self.remapper[x] = i
-        self.linkCreator = LinkCreator(image_dim=self.IMG_DIM, voxelSize=voxelSize)
+        # for i, x in enumerate([0,1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,13,14,15,16,17,18,19]):
+        #     self.remapper[x] = i
+        
+        # self.linkCreator = LinkCreator(image_dim=self.IMG_DIM, voxelSize=self.voxelSize)
+        self.linkCreator = LinkCreator(voxelSize=self.voxelSize)
+        # self.linkCreator = LinkCreator(intrisic,image_dim=self.IMG_DIM, voxelSize=self.voxelSize)
         
          # 2D AUG
         value_scale = 255
@@ -169,7 +189,7 @@ class BPNet(nn.Module):
         std = [item * value_scale for item in std]
 
         self.aug = cfg.aug
-        if self.aug:
+        if self.aug:#false
             self.transform_2d = t_2d.Compose([
                 t_2d.RandomGaussianBlur(),
                 t_2d.Crop([self.IMG_DIM[1] + 1, self.IMG_DIM[0] + 1], crop_type='rand', padding=mean,
@@ -358,7 +378,7 @@ class BPNet(nn.Module):
 
 
 
-    def get_2d(self,train_id_paths, coords: np.ndarray,image_path):
+    def get_2d(self, coords: np.ndarray,image_path):
     # def get_2d(self, coords: np.ndarray,train_id_paths,image_path):
         """
         :param      coords: Nx3
@@ -368,32 +388,29 @@ class BPNet(nn.Module):
         """
         # 默认为False
         self.val_benchmark = False
-        frames_path = train_id_paths[0]
-        # frames_path = ['/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/0.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg']
-        # image_path = "/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/1120.jpg"
-        #frames_path 是這個場景的训练集所有图片 对于scannet241是100帧
-        # print(room_id)
-        partial = int(len(frames_path) / self.viewNum)
+        
         imgs, labels, links = [], [], []
         for v in range(self.viewNum):
-
             # 这里三个f都是同一个文件
             if isinstance(image_path,list):
                 image_pa = image_path[0]
             else:
                 image_pa = image_path
             
-            
-            if tuple([image_pa,]) in frames_path[v * partial:v * partial + partial]:
-                imgio = imageio.imread(image_pa)
+            # 应该是这里 有问题 
+            if tuple([image_pa,]) in self.datasetList[v]:
                 img = Image.open(image_pa)
                 img = img.resize(self.IMG_DIM, Image.NEAREST)
                 img = np.array(img, dtype='float32')
                 # label = imageio.imread(image_pa.replace('color', 'label').replace('jpg', 'png'))
                 label = Image.open(image_pa.replace('color', 'label').replace('jpg', 'png'))
                 label = label.resize(self.IMG_DIM, Image.NEAREST)
+                label = np.array(label, dtype='int')
+                label[label == -100] = 255 #None is -100
+                label = self.remapper[label]
                 label = np.array(label, dtype='float32')
-                # label = self.remapper[label] # 这里可以不用搞因为这里的语义label都已经处理过了，如果没有处理过需要用到这里
+
+                
                 # depth = imageio.imread(image_pa.replace('color', 'depth').replace('jpg', 'png')) / 1000.0  # convert to meter
                 depth = Image.open(image_pa.replace('color', 'depth').replace('jpg', 'png'))
                 depth = depth.resize(self.IMG_DIM, Image.NEAREST)
@@ -409,11 +426,18 @@ class BPNet(nn.Module):
                 link[:, 1:4] = self.linkCreator.computeLinking(pose, coords, depth)
 
                 img = self.transform_2d(img)
+                #为了测试顺序
                 imgs.insert(0,img)
+                # imgs.append(img)
+                labels.insert(0,label)
                 # labels.append(label)
                 links.insert(0,link)
+                # links.append(link)
                 continue
-            f = random.sample(frames_path[v * partial:v * partial + partial], k=1)[0][0]
+
+            f = random.sample(self.datasetList[v], k=1)[0][0]
+            image_pa = f
+            
             # if not self.val_benchmark:
             #     f = random.sample(frames_path[v * partial:v * partial + partial], k=1)[0][0]
             # else:
@@ -423,15 +447,19 @@ class BPNet(nn.Module):
             # pdb.set_trace()
             # imgio = imageio.imread(image_pa)
 
-            image_pa = f
+            
             img = Image.open(image_pa)
             img = img.resize(self.IMG_DIM, Image.NEAREST)
             img = np.array(img, dtype='float32')
-            # label = imageio.imread(image_pa.replace('color', 'label').replace('jpg', 'png'))
-            label = Image.open(image_pa.replace('color', 'label').replace('jpg', 'png'))
-            label = label.resize(self.IMG_DIM, Image.NEAREST)
-            label = np.array(label, dtype='float32')
-            # label = self.remapper[label] # 这里可以不用搞因为这里的语义label都已经处理过了，如果没有处理过需要用到这里
+
+            # label = Image.open(image_pa.replace('color', 'label').replace('jpg', 'png'))
+            # label = label.resize(self.IMG_DIM, Image.NEAREST)
+            # label = np.array(label, dtype='int')
+            # label[label == -100] = 255 #None is -100
+            # label = self.remapper[label]
+            # label = np.array(label, dtype='float32')
+
+
             # depth = imageio.imread(image_pa.replace('color', 'depth').replace('jpg', 'png')) / 1000.0  # convert to meter
             depth = Image.open(image_pa.replace('color', 'depth').replace('jpg', 'png'))
             depth = depth.resize(self.IMG_DIM, Image.NEAREST)
@@ -455,14 +483,29 @@ class BPNet(nn.Module):
         # labels = torch.stack(labels, dim=-1)
         links = np.stack(links, axis=-1)
         links = torch.from_numpy(links)
-        return imgs, links
+        if labels==[]:
+            print("none label")
+        return imgs, links,labels
 
 
     # def train_bpnet(self,locs_in,feats_in):
-    def train_bpnet(self,locs_in,feats_in,train_id_paths,image_path):
-        
-        # colors, links = self.get_2d(locs_in)
-        colors, links = self.get_2d(train_id_paths, locs_in,image_path)
+    def train_bpnet(self,locs_in,feats_in,train_id_paths,image_path,intrisic):
+
+        # 将训练集按照viewnum均分
+        frames_path = train_id_paths[0]
+        # frames_path = ['/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/0.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg','/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/5.jpg']
+        # image_path = "/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046/scene0046_02/exported/color/1120.jpg"
+        #frames_path 是這個場景的训练集所有图片 对于scannet241是100帧
+        # print(room_id)
+        partial = int(len(frames_path) / self.viewNum)
+        self.datasetList = []
+        for v in range(self.viewNum):
+            if v == (self.viewNum-1):
+                self.datasetList.append(frames_path[v * partial:])
+                break
+            self.datasetList.append(frames_path[v * partial:v * partial + partial])
+
+        colors, links,labels2d = self.get_2d(locs_in,image_path)
         
         locs = self.prevoxel_transforms(locs_in) if self.aug else locs_in
         locs, feats, labels_3d, inds_reconstruct, links = self.voxelizer.voxelize(locs, feats_in, link=links)
@@ -497,14 +540,77 @@ class BPNet(nn.Module):
         # output_3d = output_3d.resize(output_3d.shape[0],1).cpu().numpy() #将数据从 [125988] -> [125988,1]
         output_2d = output_2d.detach().max(1)[1] #【B，H,W，V】[1,480,640,3]
 
+
+        """
+        # colordict = {
+        #     0:[174,198,232],  # wall  浅蓝
+        #     1:[151,223,137],  #floor  浅绿
+        #     2:[31,120,180],   #cabinet 深蓝
+        #     3:[255,188,120],  #bed  橘黄
+        #     4:[188,189,35],   #chair 黄绿
+        #     5:[140,86,74],    #sofa    红棕色
+        #     6:[255,152,151],  #table  肉粉
+        #     7:[213,39,40],    #door  大红
+        #     8:[196,176,213],  # window 浅紫色
+        #     9:[148,103,188],  #bookshelf 紫色
+        #     10:[196,156,148], #picture painting 粉紫色
+        #     11:[23,190,208],  #counter  浅蓝色
+        #     12:[247,183,210], #desk 粉色
+        #     13:[218,219,141], #curtain  浅黄绿
+        #     14:[254,127,14],  #refrigerator 橘色
+        #     15:[227,119,194], # shower curtain 粉紫色
+        #     16:[158,218,229], # toilet uninal  淡白蓝色
+        #     17:[43,160,45],   # sink  绿色
+        #     18:[112,128,144], #bath tub 蓝灰色
+        #     19:[82,83,163],   # closet piano piano bench  深紫色
+        #     255:[255,255,170]    # 浅黄色
+        # }
+        
+        # savePath = os.path.join(self.cfg.checkpoints_dir,self.cfg.name,"pred_2d/") 
+        # if not os.path.exists(savePath):
+        #     os.mkdir(savePath)           
+        # # save_p = "/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/checkpoints/scannet/scene024102_Semantic_640480step5_feats2one_withSemanticEmbedding_block2bpnet_/test_pred2d/"
+        
+        # pred2d = output_2d[0,...,0].cpu().numpy()  #[H,W,C]
+        # # pre2dImg = transforms.ToPILImage()(bpnet_pixel_label.float())
+        # # Image.Image.save(pre2dImg,os.path.join(savePath,"{}_pred.jpg".format(imgNum)))
+        
+        # # gt_path = image_path.replace("color","label").replace("jpg","png")
+        # # Image.Image.save(Image.open(gt_path),os.path.join(savePath,"{}_gt.jpg".format(imgNum)))
+        # if isinstance(image_path,list):
+        #     image_path = image_path[0]
+        # else:
+        #     image_path = image_path
+        # imgNum = image_path.split("/")[-1].split(".")[0]
+
+
+        # pre2dmat = []
+        # for row in  pred2d:
+        #     tem = []
+        #     for label in row:
+        #         tem.append(np.array(colordict[label])/255)
+        #     pre2dmat.append(tem)
+        # pre2dImg = transforms.ToPILImage()(torch.tensor(pre2dmat).permute(2,0,1).float())
+        # Image.Image.save(pre2dImg,os.path.join(savePath,"{}_view_pred.jpg".format(imgNum)))
+
+        # labels2d_gt = labels2d_gt[0]
+        # gt2dmat = []
+        # for row in  labels2d_gt:
+        #     tem = []
+        #     for label in row:
+        #         tem.append(np.array(colordict[label])/255)
+        #     gt2dmat.append(tem)
+        # gt2dImg = transforms.ToPILImage()(torch.tensor(gt2dmat).permute(2,0,1).float())
+        # Image.Image.save(gt2dImg,os.path.join(savePath,"{}_view_gt.jpg".format(imgNum)))
+        """
         # 返回第一张的图片
-        output_2d = output_2d[0,:,:,0]
-        # pre2dImg.save(save_p,"JPG")
-        # pre2dImg.show()
+        
+        # output_2d = output_2d[0,:,:,0]
+        
 
         # 返回的output_2d 应该是[240,320,1 ] 
         # output_3d  [122598]  0~19
         # output_3d_prob [122598,20]
-        return output_3d,output_3d_prob,output_2d,point_inside_feat
+        return output_3d,output_3d_prob,output_2d,point_inside_feat,labels2d
 
 

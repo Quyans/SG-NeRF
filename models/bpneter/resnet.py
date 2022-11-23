@@ -186,6 +186,7 @@ def resnet34(pretrained=False, **kwargs):
     if pretrained:
         # model.load_state_dict(model_zoo.load_url(model_urls['resnet34']))
         model_path = '/qys/SG-NeRF/bpnetInitmodel/resnet34-333f7ec4.pth'
+
         model.load_state_dict(torch.load(model_path), strict=False)
     return model
 

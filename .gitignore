@@ -122,10 +122,15 @@ viewer/Viewer_rc.py
 viewer/breeze_rc.py
 viewer/testData
 
-checkpoints/
-data_src/
+
+/checkpoints
+/data_src/scannet
+
 
 
 /bpnetInitmodel/
 /dev_scripts
 
+
+/my_log
+/bpNetInitmodel/

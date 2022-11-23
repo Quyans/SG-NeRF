@@ -138,8 +138,8 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
                     self.optimizer.step()
                 if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 1:
                     self.neural_point_optimizer.step()
-                if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 2:
-                    self.bpnet_optimizer.step()
+                # if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 2:
+                #     self.bpnet_optimizer.step()
 
 
     def forward(self):
@@ -195,7 +195,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
             self.neural_points.set_points(points_xyz,points_feats,points_embedding , points_color=points_color, points_dir=points_dir, points_conf=points_conf, points_semantic= points_semantic,parameter=self.opt.feedforward == 0, Rw2c=Rw2c, eulers=eulers)
         else:
             self.neural_points.editing_set_points(points_xyz, points_embedding, points_color=points_color, points_dir=points_dir, points_conf=points_conf, parameter=self.opt.feedforward == 0, Rw2c=Rw2c, eulers=eulers)
-        if self.opt.feedforward == 0 and self.opt.is_train:
+        if self.opt.feedforward == 0 and self.opt.is_train: #True
             self.setup_optimizer(self.opt)
 
 
