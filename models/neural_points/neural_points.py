@@ -307,27 +307,7 @@ class NeuralPoints(nn.Module):
             default=(-100.0, -100.0, -100.0, 100.0, 100.0, 100.0),
             help='vscale is the block size that store several voxels'
         )
-        # parser.add_argument('--predict_semantic',
-        #                     type=int,
-        #                     default=0,
-        #                     help='if 0:donot use BPNet to predict semantic;1 use BPNet to predict semantic label')
-        # parser.add_argument('--layers_2d',
-        #                     type=int,
-        #                     default=34,
-        #                     help='BPNet 2dUnet layers')
-        # parser.add_argument('--classes',
-        #                     type=int,
-        #                     default=20,
-        #                     help='BPNet predict types')
-        # parser.add_argument('--arch_3d',
-        #                     type=str,
-        #                     default="MinkUNet18A",
-        #                     help='BPNet arch_3d')     
-        # parser.add_argument('--bpnetweight',
-        #                     type=str,
-        #                     default="/home/vr717/Documents/qys/code/NSEPN/BPNet_qys/Data/ScanNet24102/initmodel/bpnet_5cm.pth.tar",
-        #                     help='bpnet pretrained model weight'
-        # )               
+                   
 
     def __init__(self, num_channels, size, opt, device, checkpoint=None, feature_init_method='rand', reg_weight=0., feedforward=0):
         super().__init__()

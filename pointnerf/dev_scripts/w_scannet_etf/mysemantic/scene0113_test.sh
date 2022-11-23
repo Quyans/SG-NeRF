@@ -14,12 +14,11 @@ data_root="${nrDataRoot}/scannet/scans/scene0113"
 scan="scene0113_00"
 
 img_wh="320 240"
-
+predict_semantic=1
 semantic_guidance=1
 layers_2d=34
 arch_3d=MinkUNet18A
 classes=20
-predict_semantic=1
 
 
 load_points=1
@@ -78,7 +77,7 @@ act_type="LeakyReLU"
 agg_intrp_order=2
 agg_distance_kernel="linear" #"avg" #"feat_intrp"
 point_features_dim=32
-shpnt_jitter="passfunc" #"uniform" # uniform gaussian
+shpnt_jitter="uniform" #"uniform" # uniform gaussian
 
 which_agg_model="viewmlp"
 apply_pnt_mask=1
@@ -161,8 +160,8 @@ zero_one_loss_weights=" 0.0001 "
 sparse_loss_weight=0
 
 color_loss_weights=" 1.0 0.0 0.0 "
-color_loss_items='ray_masked_coarse_raycolor ray_miss_coarse_raycolor coarse_raycolor'
-test_color_loss_items='coarse_raycolor ray_miss_coarse_raycolor ray_masked_coarse_raycolor'
+color_loss_items="ray_masked_coarse_raycolor ray_miss_coarse_raycolor coarse_raycolor"
+test_color_loss_items="coarse_raycolor ray_miss_coarse_raycolor ray_masked_coarse_raycolor"
 
 
 
@@ -242,8 +241,6 @@ python3 test_ft.py \
         --shading_feature_mlp_layer2 $shading_feature_mlp_layer2 \
         --shading_feature_mlp_layer2_bpnet $shading_feature_mlp_layer2_bpnet\
         --shading_feature_mlp_layer3 $shading_feature_mlp_layer3 \
-        # --shading_feature_mlp_layer4 $shading_feature_mlp_layer4 \
-        # --shading_feature_mlp_linear $shading_feature_mlp_linear \
         --shading_feature_num $shading_feature_num \
         --dist_xyz_freq $dist_xyz_freq \
         --shpnt_jitter $shpnt_jitter \
@@ -297,14 +294,6 @@ python3 test_ft.py \
         --prob_kernel_size $prob_kernel_size \
         --prob_tiers $prob_tiers \
         --query_size $query_size \
-        --semantic_guidance $semantic_guidance\ 
         --debug \
-        # --semantic_guidance $semantic_guidance \
-        # --layers_2d $layers_2d \
-        # --arch_3d $arch_3d \
-        # --classes $classes \
-        # --predict_semantic $predict_semantic\
-        # --save_label_iter $save_label_iter\
-        # --save_predict_label $save_predict_label\
-        # --img_wh $img_wh\
-        # --semantic_guidance $semantic_guidance
+        --predict_semantic $predict_semantic \
+        --semantic_guidance $semantic_guidance
