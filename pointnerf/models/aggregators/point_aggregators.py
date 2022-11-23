@@ -306,6 +306,16 @@ class PointAggregator(torch.nn.Module):
         else:
             self.block2 = self.passfunc
 
+        if opt.shading_feature_mlp_layer2_bpnet > 0:
+            in_channels = in_channels + (96 if opt.predict_semantic==1 else 0) 
+            out_channels = opt.shading_feature_num
+            block2_bpnet = []
+            for i in range(opt.shading_feature_mlp_layer2_bpnet):
+                block2_bpnet.append(nn.Linear(in_channels, out_channels))
+                block2_bpnet.append(self.act(inplace=True))
+                in_channels = out_channels
+            self.block2_bpnet = nn.Sequential(*block2_bpnet)
+            block_init_lst.append(self.block2_bpnet)
 
         if opt.shading_feature_mlp_layer3 > 0:
             in_channels = in_channels + (3 if "1" in list(opt.point_color_mode) else 0) + (
@@ -485,7 +495,7 @@ class PointAggregator(torch.nn.Module):
         return weights, embedding[..., 7:]
 
 
-    def viewmlp(self, sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight, pnt_mask_flat, pts, viewdirs, total_len, ray_valid, in_shape, dists):
+    def viewmlp(self,sampled_label_embedding, sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight, pnt_mask_flat, pts, viewdirs, total_len, ray_valid, in_shape, dists):
         # print("sampled_Rw2c", sampled_Rw2c.shape, sampled_xyz.shape)
         # assert sampled_Rw2c.dim() == 2
         B, R, SR, K, _ = dists.shape
@@ -517,7 +527,7 @@ class PointAggregator(torch.nn.Module):
             if self.opt.num_feat_freqs > 0:
                 feat = torch.cat([feat, positional_encoding(feat, self.opt.num_feat_freqs)], dim=-1)
             pts = pts_ray
-        else:
+        else: #True
             dists_flat = dists.view(-1, dists.shape[-1])
             if self.opt.apply_pnt_mask > 0:
                 dists_flat = dists_flat[pnt_mask_flat, :]
@@ -552,6 +562,16 @@ class PointAggregator(torch.nn.Module):
             if self.opt.agg_intrp_order > 0:
                 feat = torch.cat([feat, dists_flat], dim=-1)
             feat = self.block2(feat)
+
+        if self.opt.shading_feature_mlp_layer2_bpnet>0: #True
+            
+            if sampled_label_embedding is not None:
+                sampled_label_embedding = sampled_label_embedding.view(-1, sampled_label_embedding.shape[-1])
+                if self.opt.apply_pnt_mask > 0:
+                    sampled_label_embedding = sampled_label_embedding[pnt_mask_flat, :]
+                feat = torch.cat([feat, sampled_label_embedding], dim=-1)  # [35634,256+3]
+            feat = self.block2_bpnet(feat)
+
 
         if self.opt.shading_feature_mlp_layer3>0:
             if sampled_color is not None:
