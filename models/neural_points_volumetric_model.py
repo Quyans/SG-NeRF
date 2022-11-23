@@ -444,7 +444,9 @@ class NeuralPointsRayMarching(nn.Module):
         test_id_paths = inputs["test_id_paths"] if inputs.get('test_id_paths')!=None else None #需要改
         image_path = inputs["image_path"] if inputs.get('image_path')!=None else None #image_path
         gt_semantic_img = inputs["gt_semantic_img"] if inputs.get('gt_semantic_img')!=None else None 
-        
+        pred2d_switch = inputs["pred2d_switch"]
+
+
         gt_semantic_img = gt_semantic_img[0,...,0] #[480,640]
         
         output = {}
@@ -489,31 +491,26 @@ class NeuralPointsRayMarching(nn.Module):
                 os.mkdir(savePath)           
             # save_p = "/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/checkpoints/scannet/scene024102_Semantic_640480step5_feats2one_withSemanticEmbedding_block2bpnet_/test_pred2d/"
             
-            pred2d = savePixelLabel[0,...,0].cpu().numpy()  #[H,W,C]
-            # pre2dImg = transforms.ToPILImage()(bpnet_pixel_label.float())
-            # Image.Image.save(pre2dImg,os.path.join(savePath,"{}_pred.jpg".format(imgNum)))
-            
-            # gt_path = image_path.replace("color","label").replace("jpg","png")
-            # Image.Image.save(Image.open(gt_path),os.path.join(savePath,"{}_gt.jpg".format(imgNum)))
+            if pred2d_switch:
+                pred2d = savePixelLabel[0,...,0].cpu().numpy()  #[H,W,C]
+                pre2dmat = []
+                for row in  pred2d:
+                    tem = []
+                    for label in row:
+                        tem.append(np.array(colordict[label])/255)
+                    pre2dmat.append(tem)
+                pre2dImg = transforms.ToPILImage()(torch.tensor(pre2dmat).permute(2,0,1).float())
+                Image.Image.save(pre2dImg,os.path.join(savePath,"{}_view_pred.jpg".format(imgNum)))
 
-            pre2dmat = []
-            for row in  pred2d:
-                tem = []
-                for label in row:
-                    tem.append(np.array(colordict[label])/255)
-                pre2dmat.append(tem)
-            pre2dImg = transforms.ToPILImage()(torch.tensor(pre2dmat).permute(2,0,1).float())
-            Image.Image.save(pre2dImg,os.path.join(savePath,"{}_view_pred.jpg".format(imgNum)))
-
-            labels2d_gt = labels2d_gt[0]
-            gt2dmat = []
-            for row in  labels2d_gt:
-                tem = []
-                for label in row:
-                    tem.append(np.array(colordict[label])/255)
-                gt2dmat.append(tem)
-            gt2dImg = transforms.ToPILImage()(torch.tensor(gt2dmat).permute(2,0,1).float())
-            Image.Image.save(gt2dImg,os.path.join(savePath,"{}_view_gt.jpg".format(imgNum)))
+                labels2d_gt = labels2d_gt[0]
+                gt2dmat = []
+                for row in  labels2d_gt:
+                    tem = []
+                    for label in row:
+                        tem.append(np.array(colordict[label])/255)
+                    gt2dmat.append(tem)
+                gt2dImg = transforms.ToPILImage()(torch.tensor(gt2dmat).permute(2,0,1).float())
+                Image.Image.save(gt2dImg,os.path.join(savePath,"{}_view_gt.jpg".format(imgNum)))
             
 
 

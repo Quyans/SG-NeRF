@@ -2,20 +2,20 @@ from models.mvs.mvs_utils import read_pfm
 import os
 import numpy as np
 import cv2
+from PIL import Image
 import torch
 from torchvision import transforms as T
 import torchvision.transforms.functional as F
 from kornia import create_meshgrid
 import time
 import json
-from tqdm import tqdm
+
 from torch.utils.data import Dataset, DataLoader
 import torch
 import os
 from PIL import Image
-import imageio
 import h5py
-import models.mvs.mvs_utils as mvs_utils
+
 from data.base_dataset import BaseDataset
 import configparser
 
@@ -23,8 +23,7 @@ from os.path import join
 import cv2
 # import torch.nn.functional as F
 from .data_utils import get_dtu_raydir
-from plyfile import PlyData, PlyElement
-#左手系<-->右手系
+
 FLIP_Z = np.asarray([
     [1,0,0],
     [0,1,0],
@@ -86,23 +85,20 @@ def get_ray_directions(H, W, focal, center=None):
 
     return directions
 
-class ScannetFtDataset(BaseDataset):
+class NerfSynthFtDataset(BaseDataset):
 
     def initialize(self, opt, img_wh=[800,800], downSample=1.0, max_len=-1, norm_w2c=None, norm_c2w=None):
         self.opt = opt
-
-        self.novel_cam_trajectory = (opt.novel_cam_trajectory =='1')
-
         self.data_dir = opt.data_root
         self.scan = opt.scan
         self.split = opt.split
 
-        self.img_wh = (int(opt.img_wh[0] * downSample), int(opt.img_wh[1] * downSample))
+        self.img_wh = (int(800 * downSample), int(800 * downSample))
         self.downSample = downSample
 
         self.scale_factor = 1.0 / 1.0
         self.max_len = max_len
-        self.near_far = [opt.near_plane, opt.far_plane]#0.1~8
+
         self.blender2opencv = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
         self.height, self.width = int(self.img_wh[1]), int(self.img_wh[0])
 
@@ -110,33 +106,26 @@ class ScannetFtDataset(BaseDataset):
             self.bg_color = (0, 0, 0)
         elif self.opt.bg_color == 'white':
             self.bg_color = (1, 1, 1)
-        elif self.opt.bg_color == 'red':
-            self.bg_color = (1, 0, 0)
         elif self.opt.bg_color == 'random':
             self.bg_color = 'random'
         else:
             self.bg_color = [float(one) for one in self.opt.bg_color.split(",")]
 
         self.define_transforms()
-
+        with open(os.path.join(self.data_dir, self.scan, f'transforms_train.json'), 'r') as f:
+            self.meta = json.load(f)
         self.build_init_metas()
 
         self.norm_w2c, self.norm_c2w = torch.eye(4, device="cuda", dtype=torch.float32), torch.eye(4, device="cuda", dtype=torch.float32)
-        # if opt.normview > 0:
-        #     _, _ , w2cs, c2ws = self.build_proj_mats(list=torch.load('../data/dtu_configs/pairs.th')[f'{self.scan}_test'])
-        #     norm_w2c, norm_c2w = self.normalize_cam(w2cs, c2ws)
-        # if opt.normview >= 2:
-        #     self.norm_w2c, self.norm_c2w = torch.as_tensor(norm_w2c, device="cuda", dtype=torch.float32), torch.as_tensor(norm_c2w, device="cuda", dtype=torch.float32)
-        #     norm_w2c, norm_c2w = None, None
-        # self.proj_mats, self.intrinsics, self.world2cams, self.cam2worlds = self.build_proj_mats()
-        self.intrinsic = np.loadtxt(os.path.join(self.data_dir, self.scan, "exported/intrinsic/intrinsic_color.txt")).astype(np.float32)[:3,:3]
-        self.depth_intrinsic = np.loadtxt(
-            os.path.join(self.data_dir, self.scan, "exported/intrinsic/intrinsic_depth.txt")).astype(np.float32)[:3, :3]
-        img = Image.open(self.image_paths[0])
-        ori_img_shape = list(self.transform(img).shape)  # (4, h, w)
-        self.intrinsic[0, :] *= (self.width / ori_img_shape[2])
-        self.intrinsic[1, :] *= (self.height / ori_img_shape[1])
-        # print(self.intrinsic)
+        if opt.normview > 0:
+            _, _ , w2cs, c2ws = self.build_proj_mats(list=torch.load('../data/dtu_configs/pairs.th')[f'{self.scan}_test'])
+            norm_w2c, norm_c2w = self.normalize_cam(w2cs, c2ws)
+        if opt.normview >= 2:
+            self.norm_w2c, self.norm_c2w = torch.as_tensor(norm_w2c, device="cuda", dtype=torch.float32), torch.as_tensor(norm_c2w, device="cuda", dtype=torch.float32)
+            norm_w2c, norm_c2w = None, None
+        self.proj_mats, self.intrinsics, self.world2cams, self.cam2worlds = self.build_proj_mats(norm_w2c=norm_w2c, norm_c2w=norm_c2w)
+
+        self.read_meta()
         self.total = len(self.id_list)
         print("dataset total:", self.split, self.total)
 
@@ -157,10 +146,6 @@ class ScannetFtDataset(BaseDataset):
                             type=int,
                             default=3,
                             help='number of random samples')
-        parser.add_argument('--edge_filter',
-                            type=int,
-                            default=3,
-                            help='number of random samples')
         parser.add_argument('--shape_id', type=int, default=0, help='shape id')
         parser.add_argument('--trgt_id', type=int, default=0, help='shape id')
         parser.add_argument('--num_nn',
@@ -170,14 +155,14 @@ class ScannetFtDataset(BaseDataset):
         parser.add_argument(
             '--near_plane',
             type=float,
-            default=0.5,
+            default=2.125,
             help=
             'Near clipping plane, by default it is computed according to the distance of the camera '
         )
         parser.add_argument(
             '--far_plane',
             type=float,
-            default=5.0,
+            default=4.525,
             help=
             'Far clipping plane, by default it is computed according to the distance of the camera '
         )
@@ -245,127 +230,71 @@ class ScannetFtDataset(BaseDataset):
                             type=int,
                             default=0,
                             help='normalize the ray_dir to unit length or not, default not')
-        parser.add_argument(
-            '--img_wh',
-            type=int,
-            nargs=2,
-            default=(640, 480),
-            # default=(320, 240),
-            help='resize target of the image'
-        )
-        parser.add_argument(
-            '--novel_cam_trajectory',
-            type=str,
-            default='0',
-            help='if use novel camera trajectory to rendering ,default not!Mention that if you want to use this option,just alter the scan option at the same time ;for example train scan is scene0000_00 ,So I want to render a new cam trace ,i set this option to 1 and change scan option to scene0000_01'
-        )
 
         return parser
 
     def normalize_cam(self, w2cs, c2ws):
+        # cam_xyz = c2ws[..., :3, 3]
+        # rtp = self.bcart2sphere(cam_xyz)
+        # print(rtp.shape)
+        # rtp = np.mean(rtp, axis=0)
+        # avg_xyz = self.sphere2cart(rtp)
+        # euler_lst = []
+        # for i in range(len(c2ws)):
+        #     euler_angles = self.matrix2euler(c2ws[i][:3,:3])
+        #     print("euler_angles", euler_angles)
+        #     euler_lst += [euler_angles]
+        # euler = np.mean(np.stack(euler_lst, axis=0), axis=0)
+        # print("euler mean ",euler)
+        # M = self.euler2matrix(euler)
+        # norm_c2w = np.eye(4)
+        # norm_c2w[:3,:3] = M
+        # norm_c2w[:3,3] = avg_xyz
+        # norm_w2c = np.linalg.inv(norm_c2w)
+        # return norm_w2c, norm_c2w
         index = 0
         return w2cs[index], c2ws[index]
 
     def define_transforms(self):
         self.transform = T.ToTensor()
 
-    def variance_of_laplacian(self, image):
-        # compute the Laplacian of the image and then return the focus
-        # measure, which is simply the variance of the Laplacian
-        return cv2.Laplacian(image, cv2.CV_64F).var()
-
-    def detect_blurry(self, list):
-        blur_score = []
-        for id in list:
-            image_path = os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(id))
-            image = cv2.imread(image_path)
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            fm = self.variance_of_laplacian(gray)
-            blur_score.append(fm)
-        blur_score = np.asarray(blur_score)
-        ids = blur_score.argsort()[:150]#认为拉普拉斯算子的方差小的图片为blur图片
-        allind = np.asarray(list)
-        print("most blurry images", allind[ids])
-
-    def remove_blurry(self, list):
-        blur_path = os.path.join(self.data_dir, self.scan, "exported/blur_list.txt")
-        if os.path.exists(blur_path):
-            blur_lst = []
-            with open(blur_path) as f:
-                lines = f.readlines()
-                print("blur files", len(lines))
-                for line in lines:
-                    info = line.strip()
-                    blur_lst.append(int(info))
-            return [i for i in list if i not in blur_lst]
-        else:
-            print("no blur list detected, use all training frames!")
-            return list
+    #
+    # def load_poses_all(self):
+    #     c2ws = []
+    #     List = sorted(os.listdir(os.path.join(self.data_dir, f'Cameras/train/')))
+    #     for item in List:
+    #         proj_mat_filename = os.path.join(self.data_dir, f'Cameras/train/{item}')
+    #         intrinsic, w2c, near_far = self.read_cam_file(proj_mat_filename)
+    #         intrinsic[:2] *= 4
+    #         c2ws.append(np.linalg.inv(w2c))
+    #     self.focal = [intrinsic[0, 0], intrinsic[1, 1]]
+    #     return np.stack(c2ws)
 
 
     def build_init_metas(self):
-        colordir = os.path.join(self.data_dir, self.scan, "exported/color")
-        # 我认为这么做主要是 os.listdir()得到的list无序，所以重新按顺序存入数组
-        self.image_paths = [f for f in os.listdir(colordir) if os.path.isfile(os.path.join(colordir, f))]
-        self.image_paths = [os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(i)) for i in range(len(self.image_paths))]
-        self.all_id_list = self.filter_valid_id(list(range(len(self.image_paths))))
-        if  not self.novel_cam_trajectory : #True
-            if len(self.all_id_list) > 2900: # neural point-based graphics' configuration
-                self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
-                self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
-            else:  # nsvf configuration
-                step=5#5
-                self.train_id_list = self.all_id_list[::step]
-                # self.train_id_list = [5,124,497]
+        self.view_id_list = []
+        self.id_list = []
 
-                self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
-                # self.test_id_list = [0,300,400]
+        if self.split=="train":
+            with open(f'../data/nerf_synth_configs/list/{self.scan}_finetune_init_pairs_final.txt') as f:
+                num_lst = f.readline().rstrip().split(',')
+                num_viewpoint, num_pairs = int(num_lst[0]), int(num_lst[1])
+                # viewpoints (20)
+                for _ in range(num_viewpoint):
+                    ref_view = int(f.readline().rstrip())
+                    str_lst=f.readline().rstrip().split(',')
+                    src_views = [int(x) for x in str_lst]
+                    self.view_id_list.append([ref_view] + src_views)
+                    self.id_list.append(ref_view)
+                for _ in range(num_viewpoint, num_pairs):
+                    ref_view = int(f.readline().rstrip())
+                    str_lst = f.readline().rstrip().split(',')
+                    src_views = [int(x) for x in str_lst]
+                    self.view_id_list.append([ref_view] + src_views)
+
         else:
-            #assert self.split == "test", 'split==train! error!cant train at new camera trajectory'
-            print("Novel camera trajectory rendering")
-            self.test_id_list = self.all_id_list[::10]
-            self.train_id_list = []
-            self.test_id_list = self.all_id_list[300:600][::10]
-            # self.test_id_list = self.all_id_list[::1]
-            # self.train_id_list = []
-        print("all_id_list",len(self.all_id_list))
-        print("test_id_list",len(self.test_id_list), self.test_id_list)
-        print("train_id_list",len(self.train_id_list))
-        
-        #self.train_id_list = self.remove_blurry(self.train_id_list)
-        
-        self.train_id_paths = [ [os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(i)) for i in self.train_id_list]]
-        self.test_id_paths = [ [os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(i)) for i in self.test_id_list]]
+            self.id_list = torch.load('../data/dtu_configs/pairs.th')[f'{self.scan}_{self.split}']
 
-        self.id_list = self.train_id_list if self.split=="train" else self.test_id_list
-        self.view_id_list=[]
-
-
-    def filter_valid_id(self, id_list):
-        empty_lst=[]
-        for id in id_list:
-            c2w = np.loadtxt(os.path.join(self.data_dir, self.scan, "exported/pose", "{}.txt".format(id))).astype(np.float32)
-            if np.max(np.abs(c2w)) < 30:# why？针对scannet的trick吗，累加大于30证明太离谱的数据？
-                empty_lst.append(id)
-        return empty_lst
-
-    def get_campos_ray(self):
-        centerpixel=np.asarray(self.img_wh).astype(np.float32)[None,:] // 2
-        camposes=[]
-        centerdirs=[]
-        for id in self.id_list:
-            c2w = np.loadtxt(os.path.join(self.data_dir, self.scan, "exported/pose", "{}.txt".format(id))).astype(np.float32)  #@ self.blender2opencv
-            campos = c2w[:3, 3]
-            camrot = c2w[:3,:3]
-            raydir = get_dtu_raydir(centerpixel, self.intrinsic, camrot, True)
-            camposes.append(campos)
-            centerdirs.append(raydir)
-        camposes=np.stack(camposes, axis=0) # 2091, 3
-        centerdirs=np.concatenate(centerdirs, axis=0) # 2091, 3
-        # print("camposes", camposes.shape, centerdirs.shape)
-        return torch.as_tensor(camposes, device="cuda", dtype=torch.float32), torch.as_tensor(centerdirs, device="cuda", dtype=torch.float32)
-
-    #！！没看
     def build_proj_mats(self, list=None, norm_w2c=None, norm_c2w=None):
         proj_mats, intrinsics, world2cams, cam2worlds = [], [], [], []
         list = self.id_list if list is None else list
@@ -376,7 +305,7 @@ class ScannetFtDataset(BaseDataset):
         self.near_far = np.array([2.0, 6.0])
         for vid in list:
             frame = self.meta['frames'][vid]
-            c2w = np.array(frame['transform_matrix']) # @ self.blender2opencv
+            c2w = np.array(frame['transform_matrix']) @ self.blender2opencv
             if norm_w2c is not None:
                 c2w = norm_w2c @ c2w
             w2c = np.linalg.inv(c2w)
@@ -397,107 +326,49 @@ class ScannetFtDataset(BaseDataset):
         return proj_mats, intrinsics, world2cams, cam2worlds
 
 
+
     def define_transforms(self):
         self.transform = T.ToTensor()
 
-    #！！没看
-    def parse_mesh(self):
-        points_path = os.path.join(self.data_dir, self.scan, "exported/pcd.ply")
-        mesh_path = os.path.join(self.data_dir, self.scan, self.scan + "_vh_clean_2.ply")
-        plydata = PlyData.read(mesh_path)
-        print("plydata 0", plydata.elements[0], plydata.elements[0].data["blue"].dtype)
-        # parse semantic mesh
-        points_semantic_path = os.path.join(self.data_dir, self.scan, "exported/pcd_semantic.ply")
-        mesh_semantic_path = os.path.join(self.data_dir, self.scan, self.scan + "_vh_clean_2.labels.ply")
-        # print("语义：",mesh_semantic_path)
-        # ply_sem_data = PlyData.read(mesh_semantic_path)
-        # print("ply_sem_data 0", ply_sem_data.elements[0], ply_sem_data.elements[0].data["label"].dtype)
 
-        vertices = np.empty(len( plydata.elements[0].data["blue"]), dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1'),('label', 'u1')])
-        vertices['x'] = plydata.elements[0].data["x"].astype('f4')
-        vertices['y'] = plydata.elements[0].data["y"].astype('f4')
-        vertices['z'] = plydata.elements[0].data["z"].astype('f4')
-        vertices['red'] = plydata.elements[0].data["red"].astype('u1')
-        vertices['green'] = plydata.elements[0].data["green"].astype('u1')
-        vertices['blue'] = plydata.elements[0].data["blue"].astype('u1')
-        # vertices['label']=ply_sem_data.elements[0].data["label"].astype('u1')
-        # save as ply
-        ply = PlyData([PlyElement.describe(vertices, 'vertex')], text=False)
-        ply.write(points_path)
+    def read_meta(self):
 
-    #！！读point cloud 数据
-    def load_init_points(self):
-        points_path = os.path.join(self.data_dir, self.scan, "exported/pcd.ply")
-        # points_path = os.path.join(self.data_dir, self.scan, "exported/pcd_te_1_vs_0.01_jit.ply")
-        if not os.path.exists(points_path):
-            if not os.path.exists(points_path):
-                self.parse_mesh()
-        plydata = PlyData.read(points_path)
-        device = torch.device('cuda:0')
+        w, h = self.img_wh
+        self.image_paths = []
+        self.poses = []
+        self.all_rays = []
+        self.blackimgs = []
+        self.whiteimgs = []
+        self.depths = []
+        self.alphas = []
 
-        # points_semantic_path = os.path.join(self.data_dir,self.scan,"exported/")
-        # plydata (PlyProperty('x', 'double'), PlyProperty('y', 'double'), PlyProperty('z', 'double'), PlyProperty('nx', 'double'), PlyProperty('ny', 'double'), PlyProperty('nz', 'double'), PlyProperty('red', 'uchar'), PlyProperty('green', 'uchar'), PlyProperty('blue', 'uchar'))
-        x,y,z=torch.as_tensor(plydata.elements[0].data["x"].astype(np.float32), device=device, dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["y"].astype(np.float32), device=device, dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["z"].astype(np.float32), device=device, dtype=torch.float32)
-        points_xyz = torch.stack([x,y,z], dim=-1)
-        # points_label = torch.as_tensor(plydata.elements[0].data["label"].astype(np.uint8)[...,None], device=device, dtype=torch.uint8)
-        checkpoints_path =  os.path.join(self.data_dir, self.scan, "exported/points.pth")
-        pth_data = torch.load(checkpoints_path)
+        self.view_id_dict = {}
+        self.directions = get_ray_directions(h, w, [self.focal, self.focal])  # (h, w, 3)
 
-        points_feats = (pth_data[1] + 1.) * 127.5
-        points_feats = torch.as_tensor(points_feats.astype(np.float32),device=device)
-        points_loc = torch.as_tensor(pth_data[0].astype(np.float32),device=device)
-        if self.opt.ranges[0] > -99.0:
-            ranges = torch.as_tensor(self.opt.ranges, device=points_xyz.device, dtype=torch.float32)
-            mask = torch.prod(torch.logical_and(points_xyz >= ranges[None, :3], points_xyz <= ranges[None, 3:]), dim=-1) > 0
-            points_xyz = points_xyz[mask]
-            # points_label = points_label[mask]
-            points_feats = points_feats[mask]
-            points_loc = points_loc[mask]
-        # np.savetxt(os.path.join(self.data_dir, self.scan, "exported/pcd.txt"), points_xyz.cpu().numpy(), delimiter=";")
+        count = 0
+        for i, idx in enumerate(self.id_list):
+            frame = self.meta['frames'][idx]
 
-        # return points_xyz,points_feats, points_label
-        return points_xyz,points_feats
-
-    def read_depth(self, filepath):
-        depth_im = cv2.imread(filepath, -1).astype(np.float32)
-        depth_im /= 1000 #
-        depth_im[depth_im > 8.0] = 0
-        depth_im[depth_im < 0.3] = 0
-        return depth_im
+            image_path = os.path.join(self.data_dir, self.scan, f"{frame['file_path']}.png")
+            self.image_paths += [image_path]
+            img = Image.open(image_path)
+            img = img.resize(self.img_wh, Image.LANCZOS)
+            img = self.transform(img)  # (4, h, w)
+            self.depths += [(img[-1:, ...] > 0.1).numpy().astype(np.float32)]
+            self.alphas += [img[-1:].numpy().astype(np.float32)]
+            self.blackimgs += [img[:3] * img[-1:]]
+            self.whiteimgs += [img[:3] * img[-1:] + (1 - img[-1:])]
 
 
-    def load_init_depth_points(self, device="cuda", vox_res=0):
-        py, px = torch.meshgrid(
-            torch.arange(0, 480, dtype=torch.float32, device=device),
-            torch.arange(0, 640, dtype=torch.float32, device=device))
-        # print("max py, px", torch.max(py), torch.max(px))
-        # print("min py, px", torch.min(py), torch.min(px))
-        img_xy = torch.stack([px, py], dim=-1) # [480, 640, 2]
-        # print(img_xy.shape, img_xy[:10])
-        reverse_intrin = torch.inverse(torch.as_tensor(self.depth_intrinsic)).t().to(device)
-        world_xyz_all = torch.zeros([0,3], device=device, dtype=torch.float32)
-        for i in tqdm(range(len(self.all_id_list))):
-            id = self.all_id_list[i]
-            c2w = torch.as_tensor(np.loadtxt(os.path.join(self.data_dir, self.scan, "exported/pose", "{}.txt".format(id))).astype(np.float32), device=device, dtype=torch.float32)  #@ self.blender2opencv
-            # 480, 640, 1
-            depth = torch.as_tensor(self.read_depth(os.path.join(self.data_dir, self.scan, "exported/depth/{}.png".format(id))), device=device)[..., None]
-            cam_xy =  img_xy * depth
-            cam_xyz = torch.cat([cam_xy, depth], dim=-1)
-            cam_xyz = cam_xyz @ reverse_intrin
-            cam_xyz = cam_xyz[cam_xyz[...,2] > 0,:]#筛选深度>0的
-            cam_xyz = torch.cat([cam_xyz, torch.ones_like(cam_xyz[...,:1])], dim=-1)
-            world_xyz = (cam_xyz.view(-1,4) @ c2w.t())[...,:3]
-            # print("cam_xyz", torch.min(cam_xyz, dim=-2)[0], torch.max(cam_xyz, dim=-2)[0])
-            # print("world_xyz", world_xyz.shape) #, torch.min(world_xyz.view(-1,3), dim=-2)[0], torch.max(world_xyz.view(-1,3), dim=-2)[0])
-            if vox_res > 0:#True,vox_res = 100
-                world_xyz = mvs_utils.construct_vox_points_xyz(world_xyz, vox_res)
-                # print("world_xyz", world_xyz.shape)
-            world_xyz_all = torch.cat([world_xyz_all, world_xyz], dim=0)
-        if self.opt.ranges[0] > -99.0:
-            ranges = torch.as_tensor(self.opt.ranges, device=world_xyz_all.device, dtype=torch.float32)
-            mask = torch.prod(torch.logical_and(world_xyz_all >= ranges[None, :3], world_xyz_all <= ranges[None, 3:]), dim=-1) > 0
-            world_xyz_all = world_xyz_all[mask]
-        return world_xyz_all
+            # ray directions for all pixels, same for all images (same H, W, focal)
+
+            # rays_o, rays_d = get_rays(self.directions, self.cam2worlds[i])  # both (h*w, 3)
+            #
+            # self.all_rays += [torch.cat([rays_o, rays_d,
+            #                              self.near_far[0] * torch.ones_like(rays_o[:, :1]),
+            #                              self.near_far[1] * torch.ones_like(rays_o[:, :1])], 1)]  # (h*w, 8)
+            self.view_id_dict[idx] = i
+        self.poses = self.cam2worlds
 
 
     def __len__(self):
@@ -513,19 +384,17 @@ class ScannetFtDataset(BaseDataset):
     def __del__(self):
         print("end loading")
 
-
     def normalize_rgb(self, data):
         # to unnormalize image for visualization
         # data C, H, W
-        C, H, W = data.shapepoint_color_mode
+        C, H, W = data.shape
         mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
         std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
         return (data - mean) / std
 
-    #没看！！
     def get_init_item(self, idx, crop=False):
         sample = {}
-        init_view_num = self.opt.init_view_num#3
+        init_view_num = self.opt.init_view_num
         view_ids = self.view_id_list[idx]
         if self.split == 'train':
             view_ids = view_ids[:init_view_num]
@@ -570,6 +439,8 @@ class ScannetFtDataset(BaseDataset):
         alphas = np.stack(alphas)
         affine_mat, affine_mat_inv = np.stack(affine_mat), np.stack(affine_mat_inv)
         intrinsics, w2cs, c2ws, near_fars = np.stack(intrinsics), np.stack(w2cs), np.stack(c2ws), np.stack(near_fars)
+        # view_ids_all = [target_view] + list(src_views) if type(src_views[0]) is not list else [j for sub in src_views for j in sub]
+        # c2ws_all = self.cam2worlds[self.remap[view_ids_all]]
 
         sample['images'] = imgs  # (V, 3, H, W)
         sample['mvs_images'] = mvs_images  # (V, 3, H, W)
@@ -581,8 +452,13 @@ class ScannetFtDataset(BaseDataset):
         sample['proj_mats'] = proj_mats.astype(np.float32)
         sample['intrinsics'] = intrinsics.astype(np.float32)  # (V, 3, 3)
         sample['view_ids'] = np.array(view_ids)
+        # sample['light_id'] = np.array(light_idx)
         sample['affine_mat'] = affine_mat
         sample['affine_mat_inv'] = affine_mat_inv
+        # sample['scan'] = scan
+        # sample['c2ws_all'] = c2ws_all.astype(np.float32)
+
+
         for key, value in sample.items():
             if not isinstance(value, str):
                 if not torch.is_tensor(value):
@@ -593,111 +469,82 @@ class ScannetFtDataset(BaseDataset):
 
 
 
-    def __getitem__(self, id, crop=False, full_img=False):
+    def __getitem__(self, id, crop=False):
         item = {}
-        vid = self.id_list[id]
-        image_path = os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(vid))
-        # print("vid",vid)
-        img = Image.open(image_path)
-        img = img.resize(self.img_wh, Image.NEAREST)
-        img = self.transform(img)  # (4, h, w)
-        c2w = np.loadtxt(os.path.join(self.data_dir, self.scan, "exported/pose", "{}.txt".format(vid))).astype(np.float32)
-        # w2c = np.linalg.inv(c2w)
-        intrinsic = self.intrinsic#4*3
+        img = self.whiteimgs[id]
+        w2c = self.world2cams[id]
+        c2w = self.cam2worlds[id]
+        intrinsic = self.intrinsics[id]
+        proj_mat_ls, near_far = self.proj_mats[id]
 
-        # print("gt_image", img.shape)
-        width, height = img.shape[2], img.shape[1]
+        gt_image = np.transpose(img, (1,2,0))
+        # print("gt_image", gt_image.shape)
+        width, height = gt_image.shape[1], gt_image.shape[0]
         camrot = (c2w[0:3, 0:3])
         campos = c2w[0:3, 3]
         # print("camrot", camrot, campos)
-        '''
-        semantic itm
-        '''
-        semantic_path = os.path.join(self.data_dir, self.scan,  "exported/label/{}.png".format(vid))
-        gt_semantic_img = Image.open(semantic_path).convert(mode='I')
-    
-        
-        gt_semantic_img = gt_semantic_img.resize(self.img_wh, Image.NEAREST)
-        gt_semantic_img = self.transform(gt_semantic_img)  # (batch, h, w)
-        # gt_semantic_img[gt_semantic_img == -100] = 255 # 3Dneed this 
-        self.remapper = np.ones(256) * 255
-        for i, x in enumerate([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 24, 28, 33, 34, 36, 39]):
-            self.remapper[x] = i
-        gt_semantic_img = self.remapper[gt_semantic_img]
 
-        item["image_path"] = image_path
         item["intrinsic"] = intrinsic
         # item["intrinsic"] = sample['intrinsics'][0, ...]
         item["campos"] = torch.from_numpy(campos).float()
-        item["c2w"] = torch.from_numpy(c2w).float()
         item["camrotc2w"] = torch.from_numpy(camrot).float() # @ FLIP_Z
         item['lightpos'] = item["campos"]
 
-        dist = np.linalg.norm(campos)#distance from (0,0,0)
-        middle = dist + 0.7#?
+        dist = np.linalg.norm(campos)
+
+        middle = dist + 0.7
         item['middle'] = torch.FloatTensor([middle]).view(1, 1)
-        item['far'] = torch.FloatTensor([self.near_far[1]]).view(1, 1)
-        item['near'] = torch.FloatTensor([self.near_far[0]]).view(1, 1)
+        item['far'] = torch.FloatTensor([near_far[1]]).view(1, 1)
+        item['near'] = torch.FloatTensor([near_far[0]]).view(1, 1)
         item['h'] = height
         item['w'] = width
-        item['id'] = id
-        item['vid'] = vid
+        item['depths_h'] = self.depths[id]
         # bounding box
-        margin = self.opt.edge_filter# in defalu train ScanNet:10
-        if full_img:
-            item['full_image'] = img[None,...].clone()
-        gt_image = np.transpose(img, (1, 2, 0))
-        gt_semantic_img = np.transpose(gt_semantic_img,(1,2,0))
+
         subsamplesize = self.opt.random_sample_size
-        if self.opt.random_sample == "patch":#随机取一个patch，patch长宽为28*28
-            indx = np.random.randint(margin, width - margin - subsamplesize + 1)#左边沿margin，右边沿
-            indy = np.random.randint(margin, height - margin - subsamplesize + 1)
+        if self.opt.random_sample == "patch":
+            indx = np.random.randint(0, width - subsamplesize + 1)
+            indy = np.random.randint(0, height - subsamplesize + 1)
             px, py = np.meshgrid(
                 np.arange(indx, indx + subsamplesize).astype(np.float32),
                 np.arange(indy, indy + subsamplesize).astype(np.float32))
-        elif self.opt.random_sample == "random":#嗯随机28*28个点
-            px = np.random.randint(margin,
-                                   width-margin,
+        elif self.opt.random_sample == "random":
+            px = np.random.randint(0,
+                                   width,
                                    size=(subsamplesize,
                                          subsamplesize)).astype(np.float32)
-            py = np.random.randint(margin,
-                                   height-margin,
+            py = np.random.randint(0,
+                                   height,
                                    size=(subsamplesize,
                                          subsamplesize)).astype(np.float32)
         elif self.opt.random_sample == "random2":
-            px = np.random.uniform(margin,
-                                   width - margin - 1e-5,
+            px = np.random.uniform(0,
+                                   width - 1e-5,
                                    size=(subsamplesize,
                                          subsamplesize)).astype(np.float32)
-            py = np.random.uniform(margin,
-                                   height - margin - 1e-5,
+            py = np.random.uniform(0,
+                                   height - 1e-5,
                                    size=(subsamplesize,
                                          subsamplesize)).astype(np.float32)
         elif self.opt.random_sample == "proportional_random":
             raise Exception("no gt_mask, no proportional_random !!!")
-        else:#random_sample这项如果没有，全都训练
+        else:
             px, py = np.meshgrid(
-                np.arange(margin, width - margin).astype(np.float32),
-                np.arange(margin, height- margin).astype(np.float32))
+                np.arange(width).astype(np.float32),
+                np.arange(height).astype(np.float32))
+
         pixelcoords = np.stack((px, py), axis=-1).astype(np.float32)  # H x W x 2
         # raydir = get_cv_raydir(pixelcoords, self.height, self.width, focal, camrot)
         item["pixel_idx"] = pixelcoords
-        gt_image = gt_image[py.astype(np.int32), px.astype(np.int32)]
-        gt_semantic_image = gt_semantic_img[py.astype(np.int32), px.astype(np.int32)]
-        item["pixel_label"] = gt_semantic_image
-        item["gt_semantic_img"] = gt_semantic_img
-        
+        # print("pixelcoords", pixelcoords.reshape(-1,2)[:10,:])
         raydir = get_dtu_raydir(pixelcoords, item["intrinsic"], camrot, self.opt.dir_norm > 0)
-        # raylabel = gt_semantic_image #[32,32,1]
-        raydir = np.reshape(raydir, (-1, 3))#应当是一个[28*28,3]
-        # raylabel = np.reshape(raylabel,(-1,1))  #[1024,1] 
+        raydir = np.reshape(raydir, (-1, 3))
         item['raydir'] = torch.from_numpy(raydir).float()
-        # item['raylabel'] = raylabel
+        gt_image = gt_image[py.astype(np.int32), px.astype(np.int32)]
         # gt_mask = gt_mask[py.astype(np.int32), px.astype(np.int32), :]
         gt_image = np.reshape(gt_image, (-1, 3))
-        gt_semantic_image = np.reshape(gt_semantic_image, (-1, 1))
-        item['gt_semantic_image'] = gt_semantic_image
         item['gt_image'] = gt_image
+        item['id'] = id
 
         if self.bg_color:
             if self.bg_color == 'random':
@@ -709,28 +556,22 @@ class ScannetFtDataset(BaseDataset):
             else:
                 item['bg_color'] = torch.FloatTensor(self.bg_color)
 
-        # 返回训练集
-        item['train_id_paths'] = self.train_id_paths
-        # item['test_id_paths'] = self.test_id_paths
         return item
 
 
-    # item['train_id_paths'] = self.train_id_paths
-    # item['test_id_paths'] = self.test_id_paths
 
-    def get_item(self, idx, crop=False, full_img=False):
-        item = self.__getitem__(idx, crop=crop, full_img=full_img)
+    def get_item(self, idx, crop=False):
+        item = self.__getitem__(idx, crop=crop)
 
         for key, value in item.items():
-            if key=="train_id_paths" or key=="test_id_paths":
-                continue
             if not isinstance(value, str):
                 if not torch.is_tensor(value):
                     value = torch.as_tensor(value)
                 item[key] = value.unsqueeze(0)
         return item
 
-    # 没看！！
+
+
     def get_dummyrot_item(self, idx, crop=False):
 
         item = {}

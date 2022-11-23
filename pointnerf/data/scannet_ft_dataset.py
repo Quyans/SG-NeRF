@@ -13,7 +13,6 @@ from torch.utils.data import Dataset, DataLoader
 import torch
 import os
 from PIL import Image
-import imageio
 import h5py
 import models.mvs.mvs_utils as mvs_utils
 from data.base_dataset import BaseDataset
@@ -24,7 +23,7 @@ import cv2
 # import torch.nn.functional as F
 from .data_utils import get_dtu_raydir
 from plyfile import PlyData, PlyElement
-#左手系<-->右手系
+
 FLIP_Z = np.asarray([
     [1,0,0],
     [0,1,0],
@@ -90,9 +89,6 @@ class ScannetFtDataset(BaseDataset):
 
     def initialize(self, opt, img_wh=[800,800], downSample=1.0, max_len=-1, norm_w2c=None, norm_c2w=None):
         self.opt = opt
-
-        self.novel_cam_trajectory = (opt.novel_cam_trajectory =='1')
-
         self.data_dir = opt.data_root
         self.scan = opt.scan
         self.split = opt.split
@@ -102,7 +98,7 @@ class ScannetFtDataset(BaseDataset):
 
         self.scale_factor = 1.0 / 1.0
         self.max_len = max_len
-        self.near_far = [opt.near_plane, opt.far_plane]#0.1~8
+        self.near_far = [opt.near_plane, opt.far_plane]
         self.blender2opencv = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
         self.height, self.width = int(self.img_wh[1]), int(self.img_wh[0])
 
@@ -250,16 +246,8 @@ class ScannetFtDataset(BaseDataset):
             type=int,
             nargs=2,
             default=(640, 480),
-            # default=(320, 240),
-            help='resize target of the image'
+            help='resize target of the image  scannet 640 480'
         )
-        parser.add_argument(
-            '--novel_cam_trajectory',
-            type=str,
-            default='0',
-            help='if use novel camera trajectory to rendering ,default not!Mention that if you want to use this option,just alter the scan option at the same time ;for example train scan is scene0000_00 ,So I want to render a new cam trace ,i set this option to 1 and change scan option to scene0000_01'
-        )
-
         return parser
 
     def normalize_cam(self, w2cs, c2ws):
@@ -283,7 +271,7 @@ class ScannetFtDataset(BaseDataset):
             fm = self.variance_of_laplacian(gray)
             blur_score.append(fm)
         blur_score = np.asarray(blur_score)
-        ids = blur_score.argsort()[:150]#认为拉普拉斯算子的方差小的图片为blur图片
+        ids = blur_score.argsort()[:150]
         allind = np.asarray(list)
         print("most blurry images", allind[ids])
 
@@ -305,38 +293,21 @@ class ScannetFtDataset(BaseDataset):
 
     def build_init_metas(self):
         colordir = os.path.join(self.data_dir, self.scan, "exported/color")
-        # 我认为这么做主要是 os.listdir()得到的list无序，所以重新按顺序存入数组
         self.image_paths = [f for f in os.listdir(colordir) if os.path.isfile(os.path.join(colordir, f))]
         self.image_paths = [os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(i)) for i in range(len(self.image_paths))]
         self.all_id_list = self.filter_valid_id(list(range(len(self.image_paths))))
-        if  not self.novel_cam_trajectory : #True
-            if len(self.all_id_list) > 2900: # neural point-based graphics' configuration
-                self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
-                self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
-            else:  # nsvf configuration
-                step=5#5
-                self.train_id_list = self.all_id_list[::step]
-                # self.train_id_list = [5,124,497]
+        if len(self.all_id_list) > 2900: # neural point-based graphics' configuration
+            self.test_id_list = self.all_id_list[::100]
+            self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]
+        else:  # nsvf configuration
+            step=50
+            self.train_id_list = self.all_id_list[::step]
+            self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
 
-                self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
-                # self.test_id_list = [0,300,400]
-        else:
-            #assert self.split == "test", 'split==train! error!cant train at new camera trajectory'
-            print("Novel camera trajectory rendering")
-            self.test_id_list = self.all_id_list[::10]
-            self.train_id_list = []
-            self.test_id_list = self.all_id_list[300:600][::10]
-            # self.test_id_list = self.all_id_list[::1]
-            # self.train_id_list = []
         print("all_id_list",len(self.all_id_list))
         print("test_id_list",len(self.test_id_list), self.test_id_list)
         print("train_id_list",len(self.train_id_list))
-        
-        #self.train_id_list = self.remove_blurry(self.train_id_list)
-        
-        self.train_id_paths = [ [os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(i)) for i in self.train_id_list]]
-        self.test_id_paths = [ [os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(i)) for i in self.test_id_list]]
-
+        self.train_id_list = self.remove_blurry(self.train_id_list)
         self.id_list = self.train_id_list if self.split=="train" else self.test_id_list
         self.view_id_list=[]
 
@@ -345,7 +316,7 @@ class ScannetFtDataset(BaseDataset):
         empty_lst=[]
         for id in id_list:
             c2w = np.loadtxt(os.path.join(self.data_dir, self.scan, "exported/pose", "{}.txt".format(id))).astype(np.float32)
-            if np.max(np.abs(c2w)) < 30:# why？针对scannet的trick吗，累加大于30证明太离谱的数据？
+            if np.max(np.abs(c2w)) < 30:
                 empty_lst.append(id)
         return empty_lst
 
@@ -365,7 +336,7 @@ class ScannetFtDataset(BaseDataset):
         # print("camposes", camposes.shape, centerdirs.shape)
         return torch.as_tensor(camposes, device="cuda", dtype=torch.float32), torch.as_tensor(centerdirs, device="cuda", dtype=torch.float32)
 
-    #！！没看
+
     def build_proj_mats(self, list=None, norm_w2c=None, norm_c2w=None):
         proj_mats, intrinsics, world2cams, cam2worlds = [], [], [], []
         list = self.id_list if list is None else list
@@ -400,32 +371,26 @@ class ScannetFtDataset(BaseDataset):
     def define_transforms(self):
         self.transform = T.ToTensor()
 
-    #！！没看
+
     def parse_mesh(self):
         points_path = os.path.join(self.data_dir, self.scan, "exported/pcd.ply")
-        mesh_path = os.path.join(self.data_dir, self.scan, self.scan + "_vh_clean_2.ply")
+        mesh_path = os.path.join(self.data_dir, self.scan, self.scan + "_vh_clean.ply")
         plydata = PlyData.read(mesh_path)
         print("plydata 0", plydata.elements[0], plydata.elements[0].data["blue"].dtype)
-        # parse semantic mesh
-        points_semantic_path = os.path.join(self.data_dir, self.scan, "exported/pcd_semantic.ply")
-        mesh_semantic_path = os.path.join(self.data_dir, self.scan, self.scan + "_vh_clean_2.labels.ply")
-        # print("语义：",mesh_semantic_path)
-        # ply_sem_data = PlyData.read(mesh_semantic_path)
-        # print("ply_sem_data 0", ply_sem_data.elements[0], ply_sem_data.elements[0].data["label"].dtype)
 
-        vertices = np.empty(len( plydata.elements[0].data["blue"]), dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1'),('label', 'u1')])
+        vertices = np.empty(len( plydata.elements[0].data["blue"]), dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')])
         vertices['x'] = plydata.elements[0].data["x"].astype('f4')
         vertices['y'] = plydata.elements[0].data["y"].astype('f4')
         vertices['z'] = plydata.elements[0].data["z"].astype('f4')
         vertices['red'] = plydata.elements[0].data["red"].astype('u1')
         vertices['green'] = plydata.elements[0].data["green"].astype('u1')
         vertices['blue'] = plydata.elements[0].data["blue"].astype('u1')
-        # vertices['label']=ply_sem_data.elements[0].data["label"].astype('u1')
+
         # save as ply
         ply = PlyData([PlyElement.describe(vertices, 'vertex')], text=False)
         ply.write(points_path)
 
-    #！！读point cloud 数据
+
     def load_init_points(self):
         points_path = os.path.join(self.data_dir, self.scan, "exported/pcd.ply")
         # points_path = os.path.join(self.data_dir, self.scan, "exported/pcd_te_1_vs_0.01_jit.ply")
@@ -433,34 +398,20 @@ class ScannetFtDataset(BaseDataset):
             if not os.path.exists(points_path):
                 self.parse_mesh()
         plydata = PlyData.read(points_path)
-        device = torch.device('cuda:0')
-
-        # points_semantic_path = os.path.join(self.data_dir,self.scan,"exported/")
         # plydata (PlyProperty('x', 'double'), PlyProperty('y', 'double'), PlyProperty('z', 'double'), PlyProperty('nx', 'double'), PlyProperty('ny', 'double'), PlyProperty('nz', 'double'), PlyProperty('red', 'uchar'), PlyProperty('green', 'uchar'), PlyProperty('blue', 'uchar'))
-        x,y,z=torch.as_tensor(plydata.elements[0].data["x"].astype(np.float32), device=device, dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["y"].astype(np.float32), device=device, dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["z"].astype(np.float32), device=device, dtype=torch.float32)
+        x,y,z=torch.as_tensor(plydata.elements[0].data["x"].astype(np.float32), device="cuda", dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["y"].astype(np.float32), device="cuda", dtype=torch.float32), torch.as_tensor(plydata.elements[0].data["z"].astype(np.float32), device="cuda", dtype=torch.float32)
         points_xyz = torch.stack([x,y,z], dim=-1)
-        # points_label = torch.as_tensor(plydata.elements[0].data["label"].astype(np.uint8)[...,None], device=device, dtype=torch.uint8)
-        checkpoints_path =  os.path.join(self.data_dir, self.scan, "exported/points.pth")
-        pth_data = torch.load(checkpoints_path)
-
-        points_feats = (pth_data[1] + 1.) * 127.5
-        points_feats = torch.as_tensor(points_feats.astype(np.float32),device=device)
-        points_loc = torch.as_tensor(pth_data[0].astype(np.float32),device=device)
         if self.opt.ranges[0] > -99.0:
             ranges = torch.as_tensor(self.opt.ranges, device=points_xyz.device, dtype=torch.float32)
             mask = torch.prod(torch.logical_and(points_xyz >= ranges[None, :3], points_xyz <= ranges[None, 3:]), dim=-1) > 0
             points_xyz = points_xyz[mask]
-            # points_label = points_label[mask]
-            points_feats = points_feats[mask]
-            points_loc = points_loc[mask]
         # np.savetxt(os.path.join(self.data_dir, self.scan, "exported/pcd.txt"), points_xyz.cpu().numpy(), delimiter=";")
 
-        # return points_xyz,points_feats, points_label
-        return points_xyz,points_feats
+        return points_xyz
 
     def read_depth(self, filepath):
         depth_im = cv2.imread(filepath, -1).astype(np.float32)
-        depth_im /= 1000 #
+        depth_im /= 1000
         depth_im[depth_im > 8.0] = 0
         depth_im[depth_im < 0.3] = 0
         return depth_im
@@ -484,12 +435,12 @@ class ScannetFtDataset(BaseDataset):
             cam_xy =  img_xy * depth
             cam_xyz = torch.cat([cam_xy, depth], dim=-1)
             cam_xyz = cam_xyz @ reverse_intrin
-            cam_xyz = cam_xyz[cam_xyz[...,2] > 0,:]#筛选深度>0的
+            cam_xyz = cam_xyz[cam_xyz[...,2] > 0,:]
             cam_xyz = torch.cat([cam_xyz, torch.ones_like(cam_xyz[...,:1])], dim=-1)
             world_xyz = (cam_xyz.view(-1,4) @ c2w.t())[...,:3]
             # print("cam_xyz", torch.min(cam_xyz, dim=-2)[0], torch.max(cam_xyz, dim=-2)[0])
             # print("world_xyz", world_xyz.shape) #, torch.min(world_xyz.view(-1,3), dim=-2)[0], torch.max(world_xyz.view(-1,3), dim=-2)[0])
-            if vox_res > 0:#True,vox_res = 100
+            if vox_res > 0:
                 world_xyz = mvs_utils.construct_vox_points_xyz(world_xyz, vox_res)
                 # print("world_xyz", world_xyz.shape)
             world_xyz_all = torch.cat([world_xyz_all, world_xyz], dim=0)
@@ -513,19 +464,18 @@ class ScannetFtDataset(BaseDataset):
     def __del__(self):
         print("end loading")
 
-
     def normalize_rgb(self, data):
         # to unnormalize image for visualization
         # data C, H, W
-        C, H, W = data.shapepoint_color_mode
+        C, H, W = data.shape
         mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
         std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
         return (data - mean) / std
 
-    #没看！！
+
     def get_init_item(self, idx, crop=False):
         sample = {}
-        init_view_num = self.opt.init_view_num#3
+        init_view_num = self.opt.init_view_num
         view_ids = self.view_id_list[idx]
         if self.split == 'train':
             view_ids = view_ids[:init_view_num]
@@ -594,38 +544,24 @@ class ScannetFtDataset(BaseDataset):
 
 
     def __getitem__(self, id, crop=False, full_img=False):
+
         item = {}
         vid = self.id_list[id]
         image_path = os.path.join(self.data_dir, self.scan, "exported/color/{}.jpg".format(vid))
         # print("vid",vid)
         img = Image.open(image_path)
-        img = img.resize(self.img_wh, Image.NEAREST)
+        img = img.resize(self.img_wh, Image.LANCZOS)
         img = self.transform(img)  # (4, h, w)
         c2w = np.loadtxt(os.path.join(self.data_dir, self.scan, "exported/pose", "{}.txt".format(vid))).astype(np.float32)
         # w2c = np.linalg.inv(c2w)
-        intrinsic = self.intrinsic#4*3
+        intrinsic = self.intrinsic
 
-        # print("gt_image", img.shape)
+        # print("gt_image", gt_image.shape)
         width, height = img.shape[2], img.shape[1]
         camrot = (c2w[0:3, 0:3])
         campos = c2w[0:3, 3]
         # print("camrot", camrot, campos)
-        '''
-        semantic itm
-        '''
-        semantic_path = os.path.join(self.data_dir, self.scan,  "exported/label/{}.png".format(vid))
-        gt_semantic_img = Image.open(semantic_path).convert(mode='I')
-    
-        
-        gt_semantic_img = gt_semantic_img.resize(self.img_wh, Image.NEAREST)
-        gt_semantic_img = self.transform(gt_semantic_img)  # (batch, h, w)
-        # gt_semantic_img[gt_semantic_img == -100] = 255 # 3Dneed this 
-        self.remapper = np.ones(256) * 255
-        for i, x in enumerate([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 24, 28, 33, 34, 36, 39]):
-            self.remapper[x] = i
-        gt_semantic_img = self.remapper[gt_semantic_img]
 
-        item["image_path"] = image_path
         item["intrinsic"] = intrinsic
         # item["intrinsic"] = sample['intrinsics'][0, ...]
         item["campos"] = torch.from_numpy(campos).float()
@@ -633,8 +569,9 @@ class ScannetFtDataset(BaseDataset):
         item["camrotc2w"] = torch.from_numpy(camrot).float() # @ FLIP_Z
         item['lightpos'] = item["campos"]
 
-        dist = np.linalg.norm(campos)#distance from (0,0,0)
-        middle = dist + 0.7#?
+        dist = np.linalg.norm(campos)
+
+        middle = dist + 0.7
         item['middle'] = torch.FloatTensor([middle]).view(1, 1)
         item['far'] = torch.FloatTensor([self.near_far[1]]).view(1, 1)
         item['near'] = torch.FloatTensor([self.near_far[0]]).view(1, 1)
@@ -643,19 +580,18 @@ class ScannetFtDataset(BaseDataset):
         item['id'] = id
         item['vid'] = vid
         # bounding box
-        margin = self.opt.edge_filter# in defalu train ScanNet:10
+        margin = self.opt.edge_filter
         if full_img:
-            item['full_image'] = img[None,...].clone()
+            item['images'] = img[None,...].clone()
         gt_image = np.transpose(img, (1, 2, 0))
-        gt_semantic_img = np.transpose(gt_semantic_img,(1,2,0))
         subsamplesize = self.opt.random_sample_size
-        if self.opt.random_sample == "patch":#随机取一个patch，patch长宽为28*28
-            indx = np.random.randint(margin, width - margin - subsamplesize + 1)#左边沿margin，右边沿
+        if self.opt.random_sample == "patch":
+            indx = np.random.randint(margin, width - margin - subsamplesize + 1)
             indy = np.random.randint(margin, height - margin - subsamplesize + 1)
             px, py = np.meshgrid(
                 np.arange(indx, indx + subsamplesize).astype(np.float32),
                 np.arange(indy, indy + subsamplesize).astype(np.float32))
-        elif self.opt.random_sample == "random":#嗯随机28*28个点
+        elif self.opt.random_sample == "random":
             px = np.random.randint(margin,
                                    width-margin,
                                    size=(subsamplesize,
@@ -675,28 +611,20 @@ class ScannetFtDataset(BaseDataset):
                                          subsamplesize)).astype(np.float32)
         elif self.opt.random_sample == "proportional_random":
             raise Exception("no gt_mask, no proportional_random !!!")
-        else:#random_sample这项如果没有，全都训练
+        else:
             px, py = np.meshgrid(
                 np.arange(margin, width - margin).astype(np.float32),
                 np.arange(margin, height- margin).astype(np.float32))
         pixelcoords = np.stack((px, py), axis=-1).astype(np.float32)  # H x W x 2
         # raydir = get_cv_raydir(pixelcoords, self.height, self.width, focal, camrot)
         item["pixel_idx"] = pixelcoords
-        gt_image = gt_image[py.astype(np.int32), px.astype(np.int32)]
-        gt_semantic_image = gt_semantic_img[py.astype(np.int32), px.astype(np.int32)]
-        item["pixel_label"] = gt_semantic_image
-        item["gt_semantic_img"] = gt_semantic_img
-        
+        # print("pixelcoords", pixelcoords.reshape(-1,2)[:10,:])
         raydir = get_dtu_raydir(pixelcoords, item["intrinsic"], camrot, self.opt.dir_norm > 0)
-        # raylabel = gt_semantic_image #[32,32,1]
-        raydir = np.reshape(raydir, (-1, 3))#应当是一个[28*28,3]
-        # raylabel = np.reshape(raylabel,(-1,1))  #[1024,1] 
+        raydir = np.reshape(raydir, (-1, 3))
         item['raydir'] = torch.from_numpy(raydir).float()
-        # item['raylabel'] = raylabel
+        gt_image = gt_image[py.astype(np.int32), px.astype(np.int32)]
         # gt_mask = gt_mask[py.astype(np.int32), px.astype(np.int32), :]
         gt_image = np.reshape(gt_image, (-1, 3))
-        gt_semantic_image = np.reshape(gt_semantic_image, (-1, 1))
-        item['gt_semantic_image'] = gt_semantic_image
         item['gt_image'] = gt_image
 
         if self.bg_color:
@@ -709,28 +637,22 @@ class ScannetFtDataset(BaseDataset):
             else:
                 item['bg_color'] = torch.FloatTensor(self.bg_color)
 
-        # 返回训练集
-        item['train_id_paths'] = self.train_id_paths
-        # item['test_id_paths'] = self.test_id_paths
         return item
 
 
-    # item['train_id_paths'] = self.train_id_paths
-    # item['test_id_paths'] = self.test_id_paths
 
     def get_item(self, idx, crop=False, full_img=False):
         item = self.__getitem__(idx, crop=crop, full_img=full_img)
 
         for key, value in item.items():
-            if key=="train_id_paths" or key=="test_id_paths":
-                continue
             if not isinstance(value, str):
                 if not torch.is_tensor(value):
                     value = torch.as_tensor(value)
                 item[key] = value.unsqueeze(0)
         return item
 
-    # 没看！！
+
+
     def get_dummyrot_item(self, idx, crop=False):
 
         item = {}
