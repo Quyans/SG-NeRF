@@ -29,8 +29,6 @@ from utils.util import intersectionAndUnionGPU,intersectionAndUnion,AverageMeter
 
 
 
-
-
 # 交换地板和墙
 colordict = {
     0:[174,198,232],  # wall  浅蓝

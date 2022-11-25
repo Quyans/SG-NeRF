@@ -347,7 +347,7 @@ def main():
         test_dataset = create_dataset(test_opt)
         model.opt.is_train = 0
         model.opt.no_loss = 1
-        test(model, test_dataset, Visualizer(test_opt), test_opt, test_bg_info, test_steps=resume_iter)
+        test(model, test_dataset, Visualizer(test_opt), test_opt, test_bg_info,gen_vid=False, test_steps=resume_iter)
 
 if __name__ == '__main__':
     main()
