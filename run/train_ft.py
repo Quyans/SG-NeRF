@@ -973,9 +973,7 @@ def main():
             # save_label_switch = True
             # data["train_steps"]=total_steps
             if opt.save_predict_label > 0 and total_steps % opt.save_label_iter == 0:
-                # save_label_switch = True
                 model.saveSemanticPoints(total_steps)
-            # data["save_label_switch"]=save_label_switch
             data["pred2d_switch"] = False        
             if (total_steps % 1000 == 0 and total_steps > 0):
                 data["pred2d_switch"] = True

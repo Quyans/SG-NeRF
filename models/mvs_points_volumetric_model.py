@@ -116,6 +116,7 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
 
     def backward(self, iters):
         [optimizer.zero_grad() for optimizer in self.optimizers]
+        # print("is_train,",self.opt.is_train)
         if self.opt.is_train:
             #print("self.loss_total", self.ray_masked_coarse_color.grad)
             #print("self.loss_total", self.loss_total)
@@ -129,16 +130,19 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
                       fmt.END)
 
             if self.opt.feedforward:
+                # print("motherfucker0")
                 if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 2 == 0:
                     self.optimizer.step()
                 if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 2 == 1:
                     self.mvs_optimizer.step()
             else: #True
+                # print("motherfucker1")
                 if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 0:
                     self.optimizer.step()
                 if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 1:
                     self.neural_point_optimizer.step()
-                if self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 2:
+                if self.opt.bpnet_grad and  (self.opt.alter_step == 0 or int(iters / self.opt.alter_step) % 3 == 2):
+                    # print("motherfucker")
                     self.bpnet_optimizer.step()
 
 

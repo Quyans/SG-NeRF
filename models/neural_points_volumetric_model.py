@@ -120,6 +120,13 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
             type=int,
             default=0,
             help='will be set as 0 for normal traing and 1 for prob, ')
+        
+        parser.add_argument(
+            '--bpnet_grad',
+            type=int,
+            default=0,
+            help="是否训练bpnet参数"
+        )
 
 
     def add_default_color_losses(self, opt):
@@ -459,8 +466,8 @@ class NeuralPointsRayMarching(nn.Module):
             bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding,labels2d_gt = self.bpnet.train_bpnet(locs_in,feats_in,train_id_paths,image_path,intrinsicToBpnet)
             bpnet_pixel_label = bpnet_pixel_label[0,:,:,0][None,...,None]
             
-            import copy
-            savePixelLabel = copy.deepcopy(bpnet_pixel_label.detach()) 
+            # import copy
+            
              # 看一下2D的效果
             if isinstance(image_path,list):
                 image_path = image_path[0]
@@ -484,12 +491,15 @@ class NeuralPointsRayMarching(nn.Module):
             # pixel_label
 
         
-            savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name,"pred_2d/") 
-            if not os.path.exists(savePath):
-                os.mkdir(savePath)           
+                 
             # save_p = "/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/checkpoints/scannet/scene024102_Semantic_640480step5_feats2one_withSemanticEmbedding_block2bpnet_/test_pred2d/"
             
             if pred2d_switch:
+                import copy
+                savePixelLabel = copy.deepcopy(bpnet_pixel_label.detach()) 
+                savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name,"pred_2d/") 
+                if not os.path.exists(savePath):
+                    os.mkdir(savePath)      
                 pred2d = savePixelLabel[0,...,0].cpu().numpy()  #[H,W,C]
                 pre2dmat = []
                 for row in  pred2d:

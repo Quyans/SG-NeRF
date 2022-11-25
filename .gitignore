@@ -137,3 +137,4 @@ viewer/testData
 
 /pointnerf/data_src
 /pointnerf/checkpoints
+pointnerf/dev_scripts/

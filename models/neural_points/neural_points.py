@@ -654,8 +654,9 @@ class NeuralPoints(nn.Module):
         self.points_label_prob = points_label_prob
         self.points_label = points_label[...,None]    #[122598,1]
 
-        # 只设置一次
-        if bpnet_points_embedding is not None and self.bpnet_points_embedding is None:
+        # 如果bpnet参数锁死只设置一次 else 每次都设置
+        if self.opt.bpnet_grad or (bpnet_points_embedding is not None and self.bpnet_points_embedding is None):
+            # print("set bpnet")
             bp_points_embedding = nn.Parameter(bpnet_points_embedding[None,...])
             bp_points_embedding.requires_grad = self.opt.bp_embedding_grad > 0
             self.bpnet_points_embedding = bp_points_embedding
