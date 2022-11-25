@@ -137,4 +137,5 @@ viewer/testData
 
 /pointnerf/data_src
 /pointnerf/checkpoints
-pointnerf/dev_scripts/
+pointnerf/dev_scripts/w_scannet_etf/
+

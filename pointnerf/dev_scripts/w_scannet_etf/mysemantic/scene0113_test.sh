@@ -5,12 +5,15 @@ nrCheckpoint="../../checkpoints"
 nrDataRoot="../../data_src"
 
 # name='scene024102_Semantic_step50_debug2'
-name='scene0113_320240_nostep_layer4=0'
+# name='scene0113_320240_nostep_layer4=0'
+# name='scene0113_320240_step30basePointNerf_step'
+name='scene0113_320240_step50basePointNerf_bpnetNostep'
+# name='scene0113_320240_stepbasePointNerf'
 
 
 resume_iter=best #latest
 
-data_root="${nrDataRoot}/scannet/scans/scene0113"
+data_root="${nrDataRoot}/scannet/scans"
 scan="scene0113_00"
 
 img_wh="320 240"
@@ -139,10 +142,10 @@ niter_decay=10000 #250000
 n_threads=2
 
 train_and_test=0 #1
-test_num=25
+test_num=100
 test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=100
-test_num_step=50
+test_num_step=5
 
 prob_freq=1000000 #10001
 prob_num_step=1000000
