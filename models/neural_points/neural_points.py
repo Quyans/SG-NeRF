@@ -20,6 +20,8 @@ import random
 import imageio
 import math
 
+import copy
+
 # # create camera intrinsics
 # def make_intrinsic(fx, fy, mx, my):
 #     intrinsic = np.eye(4)
@@ -657,11 +659,13 @@ class NeuralPoints(nn.Module):
         # 如果bpnet参数锁死只设置一次 else 每次都设置
         if self.opt.bpnet_grad or (bpnet_points_embedding is not None and self.bpnet_points_embedding is None):
             # print("set bpnet")
-            bp_points_embedding = nn.Parameter(bpnet_points_embedding[None,...])
-            bp_points_embedding.requires_grad = self.opt.bp_embedding_grad > 0
-            self.bpnet_points_embedding = bp_points_embedding
-
-            # self.bpnet_points_embedding = bpnet_points_embedding[None,...]
+            # import copy
+            # bp_points_embedding = nn.Parameter(copy.deepcopy(bpnet_points_embedding[None,...]))
+            # bp_points_embedding.requires_grad = self.opt.bp_embedding_grad > 0
+            # bp_points_embedding.requires_grad = False
+            # self.bpnet_points_embedding = bp_points_embedding
+        # self.bpnet_points_embedding = bpnet_points_embedding[None,...]
+            self.bpnet_points_embedding = bpnet_points_embedding[None,...]
         # print(5)
 
     def editing_set_points(self, points_xyz, points_embeding, points_color=None, points_dir=None, points_conf=None,
@@ -970,6 +974,7 @@ class NeuralPoints(nn.Module):
         sampled_label_embedding = None
         if self.opt.semantic_guidance==1:
             sampled_label_embedding = torch.index_select(self.bpnet_points_embedding, 1, sample_pidx).view(B, R, SR, K, self.bpnet_points_embedding.shape[2])
+            # sampled_label_embedding = None if self.bpnet_points_embedding[None,...] is None else torch.index_select(self.bpnet_points_embedding[None,...], 1, sample_pidx).view(B, R, SR, K, self.bpnet_points_embedding[None,...].shape[2])
             # sampled_label = None if self.points_label[None,...] is None else torch.index_select(self.points_label[None,...], 1, sample_pidx).view(B, R, SR, K, self.points_label[None,...].shape[2])
 
 
