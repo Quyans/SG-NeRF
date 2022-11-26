@@ -259,6 +259,10 @@ class ScannetFtDataset(BaseDataset):
             default='0',
             help='if use novel camera trajectory to rendering ,default not!Mention that if you want to use this option,just alter the scan option at the same time ;for example train scan is scene0000_00 ,So I want to render a new cam trace ,i set this option to 1 and change scan option to scene0000_01'
         )
+        parser.add_argument('--train_step',
+                            type=int,
+                            default=50,
+                            help='set train step')
 
         return parser
 
@@ -314,7 +318,7 @@ class ScannetFtDataset(BaseDataset):
                 self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
                 self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
             else:  # nsvf configuration
-                step=50#5
+                step=self.opt.train_step #5
                 self.train_id_list = self.all_id_list[::step]
                 # self.train_id_list = [5,124,497]
 

@@ -248,7 +248,7 @@ class PointAggregator(torch.nn.Module):
                             help='BPNet arch_3d')     
         parser.add_argument('--bpnetweight',
                             type=str,
-                            default="/qys/SG-NeRF/bpnetInitmodel/bpnet_5cm.pth.tar",
+                            default="../bpnetInitmodel/bpnet_5cm.pth.tar",
                             help='bpnet pretrained model weight'
         )
 
