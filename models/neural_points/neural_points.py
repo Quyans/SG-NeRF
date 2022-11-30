@@ -316,7 +316,7 @@ class NeuralPoints(nn.Module):
 
         self.opt = opt
         self.grid_vox_sz = 0
-        self.bpnet_points_embedding,self.points_conf, self.points_dir, self.points_color, self.eulers, self.Rw2c,self.points_label,self.points_feats =None, None, None, None, None, None,None,None
+        self.points_conf, self.points_dir, self.points_color, self.eulers, self.Rw2c,self.points_label,self.points_feats =None, None, None, None, None, None,None
         self.device=device
         if self.opt.load_points ==1:#初始化时候没有，如果在pth里就有
             saved_features = None
@@ -380,7 +380,7 @@ class NeuralPoints(nn.Module):
                 self.eulers = nn.Parameter(saved_features["neural_points.eulers"]) if "neural_points.eulers" in saved_features else None
                 self.Rw2c = nn.Parameter(saved_features["neural_points.Rw2c"]) if "neural_points.Rw2c" in saved_features else torch.eye(3, device=self.xyz.device, dtype=self.xyz.dtype)
 
-                self.bpnet_points_embedding = nn.Parameter(saved_features["neural_points.bpnet_points_embedding"]) if "neural_points.bpnet_points_embedding" in saved_features else None
+                # self.bpnet_points_embedding = nn.Parameter(saved_features["neural_points.bpnet_points_embedding"]) if "neural_points.bpnet_points_embedding" in saved_features else None
             else:
                 if feature_init_method == 'rand':
                     points_embeding = torch.rand(shape, device=device, dtype=torch.float32) - 0.5
@@ -418,8 +418,8 @@ class NeuralPoints(nn.Module):
                 self.eulers.requires_grad = False
             if self.Rw2c is not None:
                 self.Rw2c.requires_grad = False#NNO
-            if self.bpnet_points_embedding is not None:
-               self.bpnet_points_embedding.requires_grad = opt.bp_embedding_grad>0 
+            # if self.bpnet_points_embedding is not None:
+            #    self.bpnet_points_embedding.requires_grad = opt.bp_embedding_grad>0 
 
         self.reg_weight = reg_weight
         self.opt.query_size = self.opt.kernel_size if self.opt.query_size[0] == 0 else self.opt.query_size
@@ -655,10 +655,11 @@ class NeuralPoints(nn.Module):
         self.points_label = points_label[...,None]    #[122598,1]
 
         # 只设置一次
-        if bpnet_points_embedding is not None and self.bpnet_points_embedding is None:
-            bp_points_embedding = nn.Parameter(bpnet_points_embedding[None,...])
-            bp_points_embedding.requires_grad = self.opt.bp_embedding_grad > 0
-            self.bpnet_points_embedding = bp_points_embedding
+        # if bpnet_points_embedding is not None and self.bpnet_points_embedding is None:
+        #     bp_points_embedding = nn.Parameter(bpnet_points_embedding[None,...])
+        #     bp_points_embedding.requires_grad = self.opt.bp_embedding_grad > 0
+        
+        self.bpnet_points_embedding = bpnet_points_embedding[None,...]
 
             # self.bpnet_points_embedding = bpnet_points_embedding[None,...]
         # print(5)

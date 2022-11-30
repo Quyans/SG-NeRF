@@ -311,10 +311,15 @@ class ScannetFtDataset(BaseDataset):
         self.all_id_list = self.filter_valid_id(list(range(len(self.image_paths))))
         if  not self.novel_cam_trajectory : #True
             if len(self.all_id_list) > 2900: # neural point-based graphics' configuration
-                self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
-                self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
+                # self.test_id_list = self.all_id_list[::100]#每隔100做一个测试
+                # self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]#中间60张做训练
+                step=100#5
+                self.train_id_list = self.all_id_list[::step]
+                # self.train_id_list = [5,124,497]
+
+                self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
             else:  # nsvf configuration
-                step=5#5
+                step=100#5
                 self.train_id_list = self.all_id_list[::step]
                 # self.train_id_list = [5,124,497]
 
