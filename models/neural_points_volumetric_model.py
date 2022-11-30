@@ -16,6 +16,8 @@ import random
 import imageio
 import math
 from torchvision import transforms
+from utils.util import intersectionAndUnionGPU,intersectionAndUnion,AverageMeter
+
 # 可视化
 # from torch.utils.tensorboard import SummaryWriter
 # from collections import namedtuple
@@ -27,30 +29,34 @@ from torchvision import transforms
 
 
 
+
+
 # 交换地板和墙
 colordict = {
-    0:[174,198,232],
-    1:[151,223,137],
-    2:[31,120,180],
-    3:[255,188,120],
-    4:[188,189,35],
-    5:[140,86,74],
-    6:[255,152,151],
-    7:[213,39,40],
-    8:[196,176,213],
-    9:[148,103,188],
-    10:[196,156,148],
-    11:[23,190,208],
-    12:[247,183,210],
-    13:[218,219,141],
-    14:[254,127,14],
-    15:[227,119,194],
-    16:[158,218,229],
-    17:[43,160,45],
-    18:[112,128,144],
-    19:[82,83,163],
-    255:[255,255,170]    
+    0:[174,198,232],  # wall  浅蓝
+    1:[151,223,137],  #floor  浅绿
+    2:[31,120,180],   #cabinet 深蓝
+    3:[255,188,120],  #bed  橘黄
+    4:[188,189,35],   #chair 黄绿
+    5:[140,86,74],    #sofa    红棕色
+    6:[255,152,151],  #table  肉粉
+    7:[213,39,40],    #door  大红
+    8:[196,176,213],  # window 浅紫色
+    9:[148,103,188],  #bookshelf 紫色
+    10:[196,156,148], #picture painting 粉紫色
+    11:[23,190,208],  #counter  浅蓝色
+    12:[247,183,210], #desk 粉色
+    13:[218,219,141], #curtain  浅黄绿
+    14:[254,127,14],  #refrigerator 橘色
+    15:[227,119,194], # shower curtain 粉紫色
+    16:[158,218,229], # toilet uninal  淡白蓝色
+    17:[43,160,45],   # sink  绿色
+    18:[112,128,144], #bath tub 蓝灰色
+    19:[82,83,163],   # closet piano piano bench  深紫色
+    255:[255,255,170]    # 浅黄色
 }
+# 在线文档
+
 
 class NeuralPointsVolumetricModel(BaseRenderingModel):
 
@@ -280,6 +286,7 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
             # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
             # self.bpnetmodel = self.bpnetmodel.to(device)
+        # bpnet.training = False
         return bpnet
 
     def setup_optimizer(self, opt):
@@ -432,19 +439,30 @@ class NeuralPointsRayMarching(nn.Module):
         h = inputs["h"] if inputs.get('h')!=None else None
         w = inputs["w"] if inputs.get('w')!=None else None
         intrinsic = inputs["intrinsic"] if inputs.get('intrinsic')!=None else None
-        pixel_label = inputs["pixel_label"] if inputs.get('pixel_label')!=None else None 
+        # pixel_label = inputs["pixel_label"] if inputs.get('pixel_label')!=None else None 
         train_id_paths = inputs["train_id_paths"] if inputs.get('train_id_paths')!=None else None #需要改
         test_id_paths = inputs["test_id_paths"] if inputs.get('test_id_paths')!=None else None #需要改
         image_path = inputs["image_path"] if inputs.get('image_path')!=None else None #image_path
+        gt_semantic_img = inputs["gt_semantic_img"] if inputs.get('gt_semantic_img')!=None else None 
+        pred2d_switch = inputs["pred2d_switch"]
 
+
+        gt_semantic_img = gt_semantic_img[0,...,0] #[480,640]
+        
         output = {}
 
         if self.opt.predict_semantic:
             # 提前做bpnet的方法
             locs_in,feats_in = self.neural_points.getPointsData()
             # bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in)
-            bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding = self.bpnet.train_bpnet(locs_in,feats_in,train_id_paths,image_path)
-
+            intrinsicToBpnet = intrinsic.cpu().numpy()[0]
+            intrinsicToBpnet = np.concatenate([intrinsicToBpnet, np.zeros((3,1))], axis=1)
+            intrinsicToBpnet = np.concatenate([intrinsicToBpnet,np.array([0,0,0,1]).reshape(1,4)],axis=0)
+            bpnet_points_label,bpnet_points_label_prob,bpnet_pixel_label,bpnet_points_embedding,labels2d_gt = self.bpnet.train_bpnet(locs_in,feats_in,train_id_paths,image_path,intrinsicToBpnet)
+            bpnet_pixel_label = bpnet_pixel_label[0,:,:,0][None,...,None]
+            
+            import copy
+            savePixelLabel = copy.deepcopy(bpnet_pixel_label.detach()) 
              # 看一下2D的效果
             if isinstance(image_path,list):
                 image_path = image_path[0]
@@ -452,39 +470,54 @@ class NeuralPointsRayMarching(nn.Module):
                 image_path = image_path
             imgNum = image_path.split("/")[-1].split(".")[0]
 
+            # intersection_meter = AverageMeter()
+            # union_meter = AverageMeter()
+            # target_meter = AverageMeter()  
+            # intersection,union,target = intersectionAndUnionGPU(bpnet_pixel_label[0,...,0],gt_semantic_img,self.opt.classes,255)
+            # intersection, union, target = intersection.cpu().numpy(), union.cpu().numpy(), target.cpu().numpy()
+            # intersection_meter.update(intersection), union_meter.update(union), target_meter.update(target)
 
+            # iou_class = intersection_meter.sum / (union_meter.sum + 1e-10)
+            # accuracy_class = intersection_meter.sum / (target_meter.sum + 1e-10)
+            # mIoU = np.mean(iou_class[union_meter.sum!=0])
+            # mAcc = np.mean(accuracy_class[union_meter.sum!=0])
+            # allAcc = sum(intersection_meter.sum) / (sum(target_meter.sum) + 1e-10)
+            
+            # pixel_label
+
+        
             savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name,"pred_2d/") 
             if not os.path.exists(savePath):
                 os.mkdir(savePath)           
             # save_p = "/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/checkpoints/scannet/scene024102_Semantic_640480step5_feats2one_withSemanticEmbedding_block2bpnet_/test_pred2d/"
-            pre2dImg = transforms.ToPILImage()(bpnet_pixel_label.float())
-            Image.Image.save(pre2dImg,os.path.join(savePath,"{}_pred.jpg".format(imgNum)))
-            gt_path = image_path.replace("color","label").replace("jpg","png")
-            Image.Image.save(Image.open(gt_path),os.path.join(savePath,"{}_gt.jpg".format(imgNum)))
             
-            bpnet_pixel_label = bpnet_pixel_label[None,...,None]
+            if pred2d_switch:
+                pred2d = savePixelLabel[0,...,0].cpu().numpy()  #[H,W,C]
+                pre2dmat = []
+                for row in  pred2d:
+                    tem = []
+                    for label in row:
+                        tem.append(np.array(colordict[label])/255)
+                    pre2dmat.append(tem)
+                pre2dImg = transforms.ToPILImage()(torch.tensor(pre2dmat).permute(2,0,1).float())
+                Image.Image.save(pre2dImg,os.path.join(savePath,"{}_view_pred.jpg".format(imgNum)))
 
-            self.predictDict.bpnet_points_label = bpnet_points_label.detach()
+                labels2d_gt = labels2d_gt[0]
+                gt2dmat = []
+                for row in  labels2d_gt:
+                    tem = []
+                    for label in row:
+                        tem.append(np.array(colordict[label])/255)
+                    gt2dmat.append(tem)
+                gt2dImg = transforms.ToPILImage()(torch.tensor(gt2dmat).permute(2,0,1).float())
+                Image.Image.save(gt2dImg,os.path.join(savePath,"{}_view_gt.jpg".format(imgNum)))
+            
+
+
+            self.predictDict.bpnet_points_label = bpnet_points_label.detach().cpu()
             self.predictDict.locs_in = locs_in
-            self.predictDict.bpnet_points_embedding = bpnet_points_embedding.detach()
-
-            if save_label_switch:
-                savedata = np.concatenate((locs_in,bpnet_points_label[...,None].cpu().numpy()),axis=-1)
-                predict_label = bpnet_points_label[...,None].cpu().numpy()
-                # print(a)
-                # np.savetxt(os.path.join(self.opt.resume_dir,"predict_label_{}.txt".format(train_steps)),savedata,fmt="%f")
-
-                savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name)
-
-                np.savetxt(os.path.join(savePath,"predict_label_{}.txt".format(train_steps)),predict_label,fmt="%f")
-                print("savetxt",savePath,"predict_label_{}.txt".format(train_steps))
-                # save_label = predict_label
-                pred_colors = []
-                for ind in range(len(predict_label)):
-                    pred_colors.append(colordict[predict_label[ind][0]])
-                save_matrix =  torch.cat((torch.Tensor(locs_in[:,0:3]),torch.Tensor(pred_colors)),dim=1)
-                np.savetxt(os.path.join(savePath,"predict_points_{}.txt".format(train_steps)),save_matrix,fmt="%f")
-                print("savepoints:",os.path.join(savePath,"predict_points_{}.txt".format(train_steps)))
+            self.predictDict.bpnet_points_embedding = bpnet_points_embedding.detach().cpu()
+            
 
             # 处理平铺展开
             # 处理成1 32 32 1的label
@@ -629,8 +662,11 @@ class NeuralPointsRayMarching(nn.Module):
     def saveSemanticEmbedding(self,epoch):
         
         save_filename = '{}_semanticEmbedding.pth'.format(epoch)
-        save_path = os.path.join(self.opt.save_dir, save_filename)
-        np.savetxt( save_path,self.predictDict.bpnet_points_embedding,fmt="%f" )
+        save_path = os.path.join(self.opt.checkpoints_dir,self.opt.name, save_filename)
+        torch.save(self.predictDict.bpnet_points_embedding,save_path)
+        # c = torch.load(save_path)
+        # b = np.loadtxt(save_path,fmt="%f")
+        # print(b)
 
     def saveSemanticPoints(self,train_steps):
 
