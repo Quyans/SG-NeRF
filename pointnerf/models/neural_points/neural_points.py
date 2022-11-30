@@ -8,6 +8,7 @@ from ..helpers.networks import init_seq, positional_encoding
 import matplotlib.pyplot as plt
 import torch.nn.utils.prune as prune_param
 
+import os
 class NeuralPoints(nn.Module):
 
     @staticmethod
@@ -300,7 +301,7 @@ class NeuralPoints(nn.Module):
                 self.points_color = nn.Parameter(saved_features["neural_points.points_color"]) if "neural_points.points_color" in saved_features else None
                 self.eulers = nn.Parameter(saved_features["neural_points.eulers"]) if "neural_points.eulers" in saved_features else None
                 self.Rw2c = nn.Parameter(saved_features["neural_points.Rw2c"]) if "neural_points.Rw2c" in saved_features else torch.eye(3, device=self.xyz.device, dtype=self.xyz.dtype)
-                self.bpnet_points_embedding = nn.Parameter(saved_features["neural_points.bpnet_points_embedding"]) if "neural_points.bpnet_points_embedding" in saved_features else None
+                # self.bpnet_points_embedding = nn.Parameter(saved_features["neural_points.bpnet_points_embedding"]) if "neural_points.bpnet_points_embedding" in saved_features else None
             else:
                 if feature_init_method == 'rand':
                     points_embeding = torch.rand(shape, device=device, dtype=torch.float32) - 0.5
@@ -338,9 +339,22 @@ class NeuralPoints(nn.Module):
                 self.eulers.requires_grad = False
             if self.Rw2c is not None:
                 self.Rw2c.requires_grad = False
-            if self.bpnet_points_embedding is not None:
-               self.bpnet_points_embedding.requires_grad = opt.bp_embedding_grad>0 
+            # if self.bpnet_points_embedding is not None:
+            #    self.bpnet_points_embedding.requires_grad = opt.bp_embedding_grad>0 
 
+            if self.opt.semantic_guidance==1:
+                # print("123")
+
+                # opt.resume_dir=resume_dir
+                # opt.resume_iter = resume_iter
+                file_path = os.path.join(self.opt.resume_dir,"{}_semanticEmbedding.pth".format(self.opt.resume_iter))
+                if os.path.exists(file_path):
+                    print(file_path)
+                    temdata = torch.load(file_path)
+                    self.bpnet_points_embedding = temdata
+                else:
+                    print("BPnet embedding is null")
+            
 
         self.reg_weight = reg_weight
         self.opt.query_size = self.opt.kernel_size if self.opt.query_size[0] == 0 else self.opt.query_size
