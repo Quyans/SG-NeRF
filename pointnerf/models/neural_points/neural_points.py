@@ -351,7 +351,7 @@ class NeuralPoints(nn.Module):
                 if os.path.exists(file_path):
                     print(file_path)
                     temdata = torch.load(file_path)
-                    self.bpnet_points_embedding = temdata
+                    self.bpnet_points_embedding = temdata.cuda()[None,...]
                 else:
                     print("BPnet embedding is null")
             
