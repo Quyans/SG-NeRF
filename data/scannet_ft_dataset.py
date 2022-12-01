@@ -408,6 +408,8 @@ class ScannetFtDataset(BaseDataset):
     def parse_mesh(self):
         points_path = os.path.join(self.data_dir, self.scan, "exported/pcd.ply")
         mesh_path = os.path.join(self.data_dir, self.scan, self.scan + "_vh_clean_2.ply")
+
+        print("mother fucker!",mesh_path)
         plydata = PlyData.read(mesh_path)
         print("plydata 0", plydata.elements[0], plydata.elements[0].data["blue"].dtype)
         # parse semantic mesh

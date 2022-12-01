@@ -703,13 +703,13 @@ def main():
                 points_feats_all = [points_feats_all] if not isinstance(points_feats_all, list) else points_feats_all
                 # points_label_all = [points_label_all] if not isinstance(points_label_all, list) else points_label_all
                 points_xyz_holder = torch.zeros([0,3], dtype=points_xyz_all[0].dtype, device="cuda")
-                print("*****************points_xyz_holder:",points_xyz_holder.device)
+                # print("*****************points_xyz_holder:",points_xyz_holder.device)
                 
                 points_feats_holder = torch.zeros([0,3], dtype=points_feats_all[0].dtype, device="cuda")
                 # points_label_holder = torch.zeros([0,1], dtype=points_label_all[0].dtype, device="cuda")
                 for i in range(len(points_xyz_all)):#一次遍历的是一张图片里
                     points_xyz = points_xyz_all[i]
-                    print("************points_xyz:",points_xyz.device)
+                    # print("************points_xyz:",points_xyz.device)
                     points_feats = points_feats_all[i]
                     # points_label = points_label_all[i]
 

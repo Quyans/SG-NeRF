@@ -527,6 +527,24 @@ class NeuralPointsRayMarching(nn.Module):
             self.predictDict.bpnet_points_embedding = bpnet_points_embedding.detach().cpu()
             
 
+            locs_in = self.predictDict.locs_in
+            bpnet_points_label = self.predictDict.bpnet_points_label
+            
+            savedata = np.concatenate((locs_in,bpnet_points_label[...,None].cpu().numpy()),axis=-1)
+            predict_label = bpnet_points_label[...,None].cpu().numpy()
+            savePath = os.path.join(self.opt.checkpoints_dir,self.opt.name)
+
+            # np.savetxt(os.path.join(savePath,"predict_label_{}.txt".format(train_steps)),predict_label,fmt="%f")
+            # print("savetxt",savePath,"predict_label_{}.txt".format(train_steps))
+            # save_label = predict_label
+            pred_colors = []
+            for ind in range(len(predict_label)):
+                pred_colors.append(colordict[predict_label[ind][0]])
+            save_matrix =  torch.cat((torch.Tensor(locs_in[:,0:3]),torch.Tensor(pred_colors)),dim=1)
+            fileDir = os.path.join(savePath,"predict_points_{}.txt".format(00))
+            np.savetxt(fileDir,save_matrix,fmt="%f")
+            print("savepoints:",fileDir)
+
             # 处理平铺展开
             # 处理成1 32 32 1的label
             # points_label为[122598,20]

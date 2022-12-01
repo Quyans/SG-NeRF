@@ -382,7 +382,7 @@ class NeuralPoints(nn.Module):
                 self.eulers = nn.Parameter(saved_features["neural_points.eulers"]) if "neural_points.eulers" in saved_features else None
                 self.Rw2c = nn.Parameter(saved_features["neural_points.Rw2c"]) if "neural_points.Rw2c" in saved_features else torch.eye(3, device=self.xyz.device, dtype=self.xyz.dtype)
 
-                self.bpnet_points_embedding = nn.Parameter(saved_features["neural_points.bpnet_points_embedding"]) if "neural_points.bpnet_points_embedding" in saved_features else None
+                # self.bpnet_points_embedding = nn.Parameter(saved_features["neural_points.bpnet_points_embedding"]) if "neural_points.bpnet_points_embedding" in saved_features else None
             else:
                 if feature_init_method == 'rand':
                     points_embeding = torch.rand(shape, device=device, dtype=torch.float32) - 0.5
@@ -420,8 +420,8 @@ class NeuralPoints(nn.Module):
                 self.eulers.requires_grad = False
             if self.Rw2c is not None:
                 self.Rw2c.requires_grad = False#NNO
-            if self.bpnet_points_embedding is not None:
-               self.bpnet_points_embedding.requires_grad = opt.bp_embedding_grad>0 
+            # if self.bpnet_points_embedding is not None:
+            #    self.bpnet_points_embedding.requires_grad = opt.bp_embedding_grad>0 
 
         self.reg_weight = reg_weight
         self.opt.query_size = self.opt.kernel_size if self.opt.query_size[0] == 0 else self.opt.query_size
