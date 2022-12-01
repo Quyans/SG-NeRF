@@ -323,12 +323,8 @@ class ScannetFtDataset(BaseDataset):
                 # self.train_id_list = [5,124,497]
 
                 self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
-            else:  # nsvf configuration
-<<<<<<< HEAD
+            else:  # nsvf configuratio
                 step=self.opt.train_step #5
-=======
-                step=self.opt.train_step#5
->>>>>>> e251b51e5e341444ddbca3ae140df82972f8eec8
                 self.train_id_list = self.all_id_list[::step]
                 # self.train_id_list = [5,124,497]
 

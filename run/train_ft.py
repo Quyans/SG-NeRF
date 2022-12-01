@@ -975,11 +975,8 @@ def main():
             if opt.save_predict_label > 0 and total_steps % opt.save_label_iter == 0:
                 model.saveSemanticPoints(total_steps)
             data["pred2d_switch"] = False        
-<<<<<<< HEAD
-            if (total_steps % 1 == 0 and total_steps > 0):
-=======
+
             if (total_steps % 2000 == 0 and total_steps > 0):
->>>>>>> e251b51e5e341444ddbca3ae140df82972f8eec8
                 data["pred2d_switch"] = True
 
             model.set_input(data)

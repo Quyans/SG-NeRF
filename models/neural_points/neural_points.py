@@ -318,7 +318,7 @@ class NeuralPoints(nn.Module):
 
         self.opt = opt
         self.grid_vox_sz = 0
-        self.points_conf, self.points_dir, self.points_color, self.eulers, self.Rw2c,self.points_label,self.points_feats =None, None, None, None, None, None,None
+        self.bpnet_points_embedding ,self.points_conf, self.points_dir, self.points_color, self.eulers, self.Rw2c,self.points_label,self.points_feats =None, None, None, None, None, None,None,None
         self.device=device
         if self.opt.load_points ==1:#初始化时候没有，如果在pth里就有
             saved_features = None
