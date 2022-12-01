@@ -26,15 +26,15 @@ for i, x in enumerate([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 24, 28, 33
 
 def f(fn):
     print("111")
-    fn2 = fn[:-3] + 'labels.ply'
+    # fn2 = fn[:-3] + 'labels.ply'
     a = plyfile.PlyData().read(fn)
     v = np.array([list(x) for x in a.elements[0]])
     coords = np.ascontiguousarray(v[:, :3])
     colors = np.ascontiguousarray(v[:, 3:6]) / 127.5 - 1
-    a = plyfile.PlyData().read(fn2)
-    w = remapper[np.array(a.elements[0]['label'])]
-    torch.save((coords, colors, w), fn[:-4] + '.pth')
-    print(fn, fn2)
+    # a = plyfile.PlyData().read(fn2)
+    # w = remapper[np.array(a.elements[0]['label'])]
+    torch.save((coords, colors), fn[:-4] + '.pth')
+    print(fn)
 
 '''
 files = sorted(glob.glob('PATH_OF_TRAIN/*_vh_clean_2.ply'))
@@ -54,8 +54,8 @@ assert len(files) == len(files2)
 # files = sorted(glob.glob('/qys/cuda10docker/BPNet-main/dataset/testtrain/*_vh_clean_2.ply'))
 # files2 = sorted(glob.glob('/qys/cuda10docker/BPNet-main/dataset/testtrain/*_vh_clean_2.labels.ply'))
 files = sorted(glob.glob('/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene0241_02sparse/*_vh_clean_2.ply'))
-files2 = sorted(glob.glob('/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene0241_02sparse/*_vh_clean_2.labels.ply'))
-assert len(files) == len(files2)
+# files2 = sorted(glob.glob('/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene0241_02sparse/*_vh_clean_2.labels.ply'))
+# assert len(files) == len(files2)
 print("fuck")
 p = mp.Pool(processes=mp.cpu_count())
 p.map(f, files)

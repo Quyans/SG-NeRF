@@ -444,7 +444,7 @@ class NeuralPointsRayMarching(nn.Module):
         test_id_paths = inputs["test_id_paths"] if inputs.get('test_id_paths')!=None else None #需要改
         image_path = inputs["image_path"] if inputs.get('image_path')!=None else None #image_path
         gt_semantic_img = inputs["gt_semantic_img"] if inputs.get('gt_semantic_img')!=None else None 
-        pred2d_switch = inputs["pred2d_switch"]
+        pred2d_switch = inputs["pred2d_switch"] if inputs.get('pred2d_switch')!=None else None 
 
 
         gt_semantic_img = gt_semantic_img[0,...,0] #[480,640]
@@ -669,7 +669,7 @@ class NeuralPointsRayMarching(nn.Module):
         # print(b)
 
     def saveSemanticPoints(self,train_steps):
-
+        # print(self.predictDict)
         locs_in = self.predictDict.locs_in
         bpnet_points_label = self.predictDict.bpnet_points_label
         
