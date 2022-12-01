@@ -447,6 +447,7 @@ class NeuralPointsRayMarching(nn.Module):
         pred2d_switch = inputs["pred2d_switch"] if inputs.get('pred2d_switch')!=None else None 
 
 
+
         gt_semantic_img = gt_semantic_img[0,...,0] #[480,640]
         
         output = {}
