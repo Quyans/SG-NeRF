@@ -689,7 +689,10 @@ class NeuralPointsRayMarching(nn.Module):
         
         save_filename = '{}_semanticEmbedding.pth'.format(epoch)
         save_path = os.path.join(self.opt.checkpoints_dir,self.opt.name, save_filename)
-        np.savetxt( save_path,self.predictDict.bpnet_points_embedding,fmt="%f" )
+        torch.save(self.predictDict.bpnet_points_embedding,save_path)
+        # c = torch.load(save_path)
+        # b = np.loadtxt(save_path,fmt="%f")
+        # print(b)
 
     def saveSemanticPoints(self,train_steps):
 

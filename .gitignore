@@ -126,15 +126,12 @@ viewer/testData
 /checkpoints
 /data_src/scannet
 
-
-
-/bpnetInitmodel/
 /dev_scripts
 
 
 /data_src
-/bpNetInitmodel/
-
+# /bpnetInitmodel//
+bpnetInitmodel
 /pointnerf/data_src
 /pointnerf/checkpoints
 pointnerf/dev_scripts/w_scannet_etf/
