@@ -444,7 +444,9 @@ class ScannetFtDataset(BaseDataset):
             if not os.path.exists(points_path):
                 self.parse_mesh()
         plydata = PlyData.read(points_path)
-        device = torch.device('cuda:0')
+        print(self.opt.gpu_ids)
+        device = torch.device('cuda:{}'.format(self.opt.gpu_ids[0]))
+        # device = torch.device('cuda:0')
 
         # points_semantic_path = os.path.join(self.data_dir,self.scan,"exported/")
         # plydata (PlyProperty('x', 'double'), PlyProperty('y', 'double'), PlyProperty('z', 'double'), PlyProperty('nx', 'double'), PlyProperty('ny', 'double'), PlyProperty('nz', 'double'), PlyProperty('red', 'uchar'), PlyProperty('green', 'uchar'), PlyProperty('blue', 'uchar'))
