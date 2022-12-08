@@ -32,9 +32,9 @@ import util
 
 # params
 parser = argparse.ArgumentParser()
-parser.add_argument('--scannet_path', default="/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046", help='path to scannet data')
+parser.add_argument('--scannet_path', default="./data_src/scannet/scans/scene046", help='path to scannet data')
 # parser.add_argument('--scannet_path', default="/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene046", help='path to scannet data')
-parser.add_argument('--output_path', default="/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/output", help='where to output 2d data')
+parser.add_argument('--output_path', default="./data_src/scannet/scans/output", help='where to output 2d data')
 parser.add_argument('--export_label_images', dest='export_label_images', action='store_true')
 parser.add_argument('--label_type', default='label-filt', help='which labels (label or label-filt)')
 parser.add_argument('--frame_skip', type=int, default=1, help='export every nth frame')
