@@ -248,6 +248,12 @@ class ScannetFtDataset(BaseDataset):
             default=(640, 480),
             help='resize target of the image  scannet 640 480'
         )
+        parser.add_argument(
+            '--train_step',
+            type=int,
+            default=50,
+            help="train step"
+        )
         return parser
 
     def normalize_cam(self, w2cs, c2ws):
@@ -299,11 +305,11 @@ class ScannetFtDataset(BaseDataset):
         if len(self.all_id_list) > 2900: # neural point-based graphics' configuration
             # self.test_id_list = self.all_id_list[::100]
             # self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]
-            step=50
+            step=self.opt.train_step
             self.train_id_list = self.all_id_list[::step]
             self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
         else:  # nsvf configuration
-            step=50
+            step=self.opt.train_step
             self.train_id_list = self.all_id_list[::step]
             self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
 

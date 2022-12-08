@@ -5,13 +5,13 @@ nrCheckpoint="../../checkpoints"
 nrDataRoot="../../data_src"
 
 # name='scene024102_Semantic_step50_debug2'
-name='scene0113_320240_nostep_layer4=0'
+name='scene0113_step20_sparse_scale10_vsize0.016'
 
 
 resume_iter=best #latest
 
-data_root="${nrDataRoot}/scannet/scans/scene0113"
-scan="scene0113_00"
+data_root="${nrDataRoot}/scannet/scans"
+scan="scene0113_00sparse"
 
 img_wh="320 240"
 predict_semantic=1
@@ -57,12 +57,12 @@ agg_color_xyz_mode="None"
 feature_init_method="rand" #"rand" # "zeros"
 agg_axis_weight=" 1. 1. 1."
 agg_dist_pers=20
-radius_limit_scale=4
+radius_limit_scale=10
 depth_limit_scale=0
 vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
-vsize=" 0.008 0.008 0.008 " #" 0.005 0.005 0.005 "
+vsize=" 0.016 0.016 0.016 " #" 0.008 0.008 0.008 " #" 0.005 0.005 0.005 "
 wcoord_query=1
 z_depth_dim=400
 max_o=610000
@@ -141,8 +141,8 @@ n_threads=2
 train_and_test=0 #1
 test_num=25
 test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
-print_freq=100
-test_num_step=350
+print_freq=10
+test_num_step=10
 
 prob_freq=1000000 #10001
 prob_num_step=1000000

@@ -134,3 +134,5 @@ viewer/testData
 bpnetInitmodel
 /pointnerf/data_src
 /pointnerf/checkpoints
+
+PC-NeRF-master/data_src
