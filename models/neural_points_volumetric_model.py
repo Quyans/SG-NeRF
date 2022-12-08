@@ -369,6 +369,15 @@ class NeuralPointsVolumetricModel(BaseRenderingModel):
 # 用来存放需要save的东西
 class PredictDict:
     tem = {}
+    bpnet_points_label=None
+    locs_in=None
+    bpnet_points_embedding=None
+    # if self.predictDict.bpnet_points_label is None:
+    #             self.predictDict.bpnet_points_label = bpnet_points_label.detach().cpu()
+    #         if self.predictDict.locs_in is None:
+    #             self.predictDict.locs_in = locs_in
+    #         if self.predictDict.bpnet_points_embedding is None:
+    #             self.predictDict.bpnet_points_embedding = bpnet_points_embedding.detach().cpu()
 
 class NeuralPointsRayMarching(nn.Module):
     def __init__(self,
@@ -514,10 +523,12 @@ class NeuralPointsRayMarching(nn.Module):
                 Image.Image.save(gt2dImg,os.path.join(savePath,"{}_view_gt.jpg".format(imgNum)))
             
 
-
-            self.predictDict.bpnet_points_label = bpnet_points_label.detach().cpu()
-            self.predictDict.locs_in = locs_in
-            self.predictDict.bpnet_points_embedding = bpnet_points_embedding.detach().cpu()
+            if self.predictDict.bpnet_points_label is None:
+                self.predictDict.bpnet_points_label = bpnet_points_label.detach().cpu()
+            if self.predictDict.locs_in is None:
+                self.predictDict.locs_in = locs_in
+            if self.predictDict.bpnet_points_embedding is None:
+                self.predictDict.bpnet_points_embedding = bpnet_points_embedding.detach().cpu()
             
 
             # 处理平铺展开

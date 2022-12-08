@@ -88,13 +88,13 @@ class MvsPointsVolumetricModel(NeuralPointsVolumetricModel):
         # todo 修改bpnet的lr
         # optimizer = torch.optim.SGD(params_list, lr=args.base_lr, momentum=args.momentum,
         #                             weight_decay=args.weight_decay)
-        if len(bpnet_params) > 0:
-            self.bpnet_optimizer = torch.optim.SGD(bpnet_params,
-                                          lr=opt.bpnet_lr,
-                                          momentum=opt.bpnet_momentum,
-                                          weight_decay=opt.bpnet_weight_decay
-                                          )
-            self.optimizers.append(self.bpnet_optimizer)
+        # if len(bpnet_params) > 0:
+        #     self.bpnet_optimizer = torch.optim.SGD(bpnet_params,
+        #                                   lr=opt.bpnet_lr,
+        #                                   momentum=opt.bpnet_momentum,
+        #                                   weight_decay=opt.bpnet_weight_decay
+        #                                   )
+        #     self.optimizers.append(self.bpnet_optimizer)
 
         if len(net_params) > 0:
             self.optimizer = torch.optim.Adam(net_params,
