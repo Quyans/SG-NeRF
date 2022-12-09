@@ -53,7 +53,9 @@ assert len(files) == len(files2)
 
 # files = sorted(glob.glob('/qys/cuda10docker/BPNet-main/dataset/testtrain/*_vh_clean_2.ply'))
 # files2 = sorted(glob.glob('/qys/cuda10docker/BPNet-main/dataset/testtrain/*_vh_clean_2.labels.ply'))
-files = sorted(glob.glob('/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene0710_00sparse/*_vh_clean_2.ply'))
+
+files = sorted(glob.glob('./data_src/scannet/scans/scene0708_00sparse/*_vh_clean_2.ply'))
+
 # files2 = sorted(glob.glob('/home/vr717/Documents/qys/code/NSEPN_ori/NSEPN/data_src/scannet/scans/scene0241_02sparse/*_vh_clean_2.labels.ply'))
 # assert len(files) == len(files2)
 print("fuck")
