@@ -25,23 +25,10 @@ def makedir(dir):
     if not os.path.exists(dir):
         os.makedirs(dir)
 
-def main():
-    parser = ArgumentParser()
-
-    parser.add_argument('--baseSrc', type=str, help='one out of: "train", "test"',
-                        default="./data_src/scannet/scans"
-    )
-
-    parser.add_argument("--expname", type=str, default="scene0046_00sparse", \
-        help='specify the experiment, required for "test" or to resume "train"')
-
+def precopy(args):
     
-    parser.add_argument("--sampleType",type=int,default=0,help="0shows using step,1shows using input xyz")
-    parser.add_argument("--step",type=int,default=50,help="0shows using step,1shows using input xyz")
-
-    args = parser.parse_args()
-    args.tarname = "{}_sparse".format(args.expname)
-    targetDB = os.path.join(args.baseSrc,args.tarname)
+    
+    targetDB = args.targetDB
     args.targetDB = targetDB
     if os.path.exists(targetDB):
         shutil.rmtree(targetDB)
@@ -149,6 +136,54 @@ def main():
         for ind in test_id_list:
             f.writelines("{}.jpg\n".format(ind))
 
+
+def main():
+    parser = ArgumentParser()
+
+    parser.add_argument('--baseSrc', type=str, help='one out of: "train", "test"',
+                        default="./data_src/scannet/scans"
+    )
+
+    parser.add_argument("--expname", type=str, default="scene0046_00sparse", \
+        help='specify the experiment, required for "test" or to resume "train"')
+
+    
+    parser.add_argument("--sampleType",type=int,default=0,help="0shows using step,1shows using input xyz")
+    parser.add_argument("--step",type=int,default=40,help="0shows using step,1shows using input xyz")
+    args = parser.parse_args()
+
+    args.tarname = "{}_sparse".format(args.expname)
+    args.targetDB = os.path.join(args.baseSrc,args.tarname)
+
+    # precopy(args=args)
+    print(args.targetDB)
+    imgs_dir = os.path.join(args.targetDB,"colmap/images.txt")
+    
+    imgids = []
+    with open(imgs_dir) as file:
+        filedata = file.readlines()
+        length = len(filedata)
+        print(length)
+        imgLen = (length-4)/2
+        print("imglen",imgLen)
+        for i in range(int(imgLen)):
+            # print(filedata[i*2+4])
+            imgid = filedata[i*2+4].split(' ')[-1].replace("\n","")
+            # print(imgid)
+            imgids.append(imgid)
+            # filedata[i*2+4].spilt()
+            # imgid.append(filedata[i*2+4].spilt()[-1])
+
+        print(imgids)
+        with open(os.path.join(args.targetDB,"all_set.txt"),mode="w") as f:
+
+            for ind in imgids:
+                f.writelines(ind+"\n")
+        
+        
+    
+
+    
     # list
 
     # 
