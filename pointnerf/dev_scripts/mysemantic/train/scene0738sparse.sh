@@ -5,13 +5,13 @@ nrCheckpoint="../../checkpoints"
 nrDataRoot="../../data_src"
 
 # name='scene024102_Semantic_step50_debug2'
-name='scene046_step50sparse_20000points_scale10_vsize0.016'
+name='pointnerf_738_rad6_0008'
 
 
-resume_iter=15000 #latest
+resume_iter=best #latest
 train_step=50
 data_root="${nrDataRoot}/scannet/scans"
-scan="scene0046_00sparse"
+scan="scene0738_00sparse"
 
 img_wh="320 240"
 predict_semantic=1
@@ -22,10 +22,10 @@ classes=20
 
 
 load_points=1
-feat_grad=1
-conf_grad=1
+feat_grad=0
+conf_grad=0
 dir_grad=0
-color_grad=1
+color_grad=0
 vox_res=900
 normview=0
 prune_thresh=-1
@@ -43,7 +43,7 @@ pre_d_est="${nrCheckpoint}/MVSNet/model_000014.ckpt"
 manual_std_depth=0.0
 depth_conf_thresh=0.8
 geo_cnsst_num=0
-edge_filter=0 # pixels crop out at image edge
+edge_filter=10 # pixels crop out at image edge
 
 appr_feature_str0="imgfeat_0_0123 dir_0 point_conf"
 point_conf_mode="1" # 0 for only at features, 1 for multi at weight
@@ -57,12 +57,12 @@ agg_color_xyz_mode="None"
 feature_init_method="rand" #"rand" # "zeros"
 agg_axis_weight=" 1. 1. 1."
 agg_dist_pers=20
-radius_limit_scale=10
+radius_limit_scale=6
 depth_limit_scale=0
 vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
-vsize=" 0.016 0.016 0.016 " #" 0.008 0.008 0.008 " #" 0.005 0.005 0.005 "
+vsize=" 0.008 0.008 0.008 " #" 0.008 0.008 0.008 " #" 0.005 0.005 0.005 "
 wcoord_query=1
 z_depth_dim=400
 max_o=610000
@@ -142,7 +142,7 @@ train_and_test=0 #1
 test_num=25
 test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=100
-test_num_step=1
+test_num_step=10
 
 prob_freq=1000000 #10001
 prob_num_step=1000000
@@ -172,7 +172,7 @@ split="train"
 
 cd run
 
-python3 test_ft.py \
+python3 train_ft.py \
         --experiment $name \
         --img_wh $img_wh\
         --scan $scan \
@@ -239,7 +239,6 @@ python3 test_ft.py \
         --shading_feature_mlp_layer0 $shading_feature_mlp_layer0 \
         --shading_feature_mlp_layer1 $shading_feature_mlp_layer1 \
         --shading_feature_mlp_layer2 $shading_feature_mlp_layer2 \
-        --shading_feature_mlp_layer2_bpnet $shading_feature_mlp_layer2_bpnet\
         --shading_feature_mlp_layer3 $shading_feature_mlp_layer3 \
         --shading_feature_num $shading_feature_num \
         --dist_xyz_freq $dist_xyz_freq \
@@ -295,6 +294,4 @@ python3 test_ft.py \
         --prob_tiers $prob_tiers \
         --query_size $query_size \
         --debug \
-        --predict_semantic $predict_semantic \
-        --semantic_guidance $semantic_guidance\
         --train_step $train_step

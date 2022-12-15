@@ -5,13 +5,13 @@ nrCheckpoint="../../checkpoints"
 nrDataRoot="../../data_src"
 
 # name='scene024102_Semantic_step50_debug2'
-name='scene046_step50sparse_20000points_scale10_vsize0.016'
+name='pointnerf_738_rad6_0008'
 
 
-resume_iter=15000 #latest
+resume_iter=best #latest
 train_step=50
 data_root="${nrDataRoot}/scannet/scans"
-scan="scene0046_00sparse"
+scan="scene0738_00sparse"
 
 img_wh="320 240"
 predict_semantic=1
@@ -22,10 +22,10 @@ classes=20
 
 
 load_points=1
-feat_grad=1
-conf_grad=1
+feat_grad=0
+conf_grad=0
 dir_grad=0
-color_grad=1
+color_grad=0
 vox_res=900
 normview=0
 prune_thresh=-1
@@ -239,7 +239,6 @@ python3 test_ft.py \
         --shading_feature_mlp_layer0 $shading_feature_mlp_layer0 \
         --shading_feature_mlp_layer1 $shading_feature_mlp_layer1 \
         --shading_feature_mlp_layer2 $shading_feature_mlp_layer2 \
-        --shading_feature_mlp_layer2_bpnet $shading_feature_mlp_layer2_bpnet\
         --shading_feature_mlp_layer3 $shading_feature_mlp_layer3 \
         --shading_feature_num $shading_feature_num \
         --dist_xyz_freq $dist_xyz_freq \
@@ -295,6 +294,4 @@ python3 test_ft.py \
         --prob_tiers $prob_tiers \
         --query_size $query_size \
         --debug \
-        --predict_semantic $predict_semantic \
-        --semantic_guidance $semantic_guidance\
         --train_step $train_step

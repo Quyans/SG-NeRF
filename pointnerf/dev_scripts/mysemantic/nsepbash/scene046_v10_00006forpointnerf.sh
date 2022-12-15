@@ -8,7 +8,7 @@ nrDataRoot="../../data_src"
 name='scene046_step50sparse_20000points_scale10_vsize0.016'
 
 
-resume_iter=15000 #latest
+resume_iter=45000 #latest
 train_step=50
 data_root="${nrDataRoot}/scannet/scans"
 scan="scene0046_00sparse"
@@ -43,7 +43,7 @@ pre_d_est="${nrCheckpoint}/MVSNet/model_000014.ckpt"
 manual_std_depth=0.0
 depth_conf_thresh=0.8
 geo_cnsst_num=0
-edge_filter=0 # pixels crop out at image edge
+edge_filter=1 # pixels crop out at image edge
 
 appr_feature_str0="imgfeat_0_0123 dir_0 point_conf"
 point_conf_mode="1" # 0 for only at features, 1 for multi at weight
@@ -57,7 +57,7 @@ agg_color_xyz_mode="None"
 feature_init_method="rand" #"rand" # "zeros"
 agg_axis_weight=" 1. 1. 1."
 agg_dist_pers=20
-radius_limit_scale=10
+radius_limit_scale=8
 depth_limit_scale=0
 vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "

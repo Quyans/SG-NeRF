@@ -5,13 +5,13 @@ nrCheckpoint="../../checkpoints"
 nrDataRoot="../../data_src"
 
 # name='scene024102_Semantic_step50_debug2'
-name='scene046_step50sparse_20000points_scale10_vsize0.016'
+name='scene738step50sparse_20000points_scale10_vsize0.016'
 
 
-resume_iter=15000 #latest
+resume_iter=best #latest
 train_step=50
 data_root="${nrDataRoot}/scannet/scans"
-scan="scene0046_00sparse"
+scan="scene0738_00sparse"
 
 img_wh="320 240"
 predict_semantic=1
@@ -141,8 +141,9 @@ n_threads=2
 train_and_test=0 #1
 test_num=25
 test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
-print_freq=100
+print_freq=10
 test_num_step=1
+
 
 prob_freq=1000000 #10001
 prob_num_step=1000000

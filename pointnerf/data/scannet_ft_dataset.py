@@ -308,10 +308,20 @@ class ScannetFtDataset(BaseDataset):
             step=self.opt.train_step
             self.train_id_list = self.all_id_list[::step]
             self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+            
+            #self.test_id_list = [100,194,237,494,658,786,881,921] 738
         else:  # nsvf configuration
             step=self.opt.train_step
             self.train_id_list = self.all_id_list[::step]
             self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+            # self.test_id_list = [100,194,237,494,658,786,881,921] #738
+            
+            # self.test_id_list = [510,560,949,966,979,1377,1496,1540] #710
+            # self.test_id_list = [1118] #241
+            # 1118
+             
+            # scene046
+            # self.test_id_list = [1481,1400,1401,1440,1441,1480,1560,1561,1600,1601,1840,1841,1880,1881,1920,1921,1960,1961,2000,2001,2120,2121,2160,2161,2200, 2201,2240,2241,2280,2281]
 
         print("all_id_list",len(self.all_id_list))
         print("test_id_list",len(self.test_id_list), self.test_id_list)

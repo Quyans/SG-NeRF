@@ -31,7 +31,7 @@ pre_d_est="${nrCheckpoint}/MVSNet/model_000014.ckpt"
 manual_std_depth=0.0
 depth_conf_thresh=0.8
 geo_cnsst_num=0
-edge_filter=10 # pixels crop out at image edge
+edge_filter=0 # pixels crop out at image edge
 
 appr_feature_str0="imgfeat_0_0123 dir_0 point_conf"
 point_conf_mode="1" # 0 for only at features, 1 for multi at weight

@@ -1,35 +1,24 @@
 #!/bin/bash
 
-
 nrCheckpoint="../../checkpoints"
 nrDataRoot="../../data_src"
+name='pointnerf_scene71000_step100_vscale0016_scale6'
 
-# name='scene024102_Semantic_step50_debug2'
-name='scene046_step50sparse_20000points_scale10_vsize0.016'
-
-
-resume_iter=15000 #latest
+resume_iter=100000 #latest
 train_step=50
-data_root="${nrDataRoot}/scannet/scans"
-scan="scene0046_00sparse"
-
-img_wh="320 240"
-predict_semantic=1
-semantic_guidance=1
-layers_2d=34
-arch_3d=MinkUNet18A
-classes=20
-
-
+data_root="${nrDataRoot}/scannet/scans/"
+scan="scene0710_00sparse"
+# scan="scene0113_00sparse"
+img_wh=" 320 240 "
 load_points=1
-feat_grad=1
-conf_grad=1
+feat_grad=0
+conf_grad=0
 dir_grad=0
-color_grad=1
+color_grad=0
 vox_res=900
 normview=0
 prune_thresh=-1
-prune_iter=-1 #10000
+prune_iter=-1
 
 feedforward=0
 ref_vid=0
@@ -57,37 +46,37 @@ agg_color_xyz_mode="None"
 feature_init_method="rand" #"rand" # "zeros"
 agg_axis_weight=" 1. 1. 1."
 agg_dist_pers=20
-radius_limit_scale=10
+radius_limit_scale=6
 depth_limit_scale=0
 vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
-vsize=" 0.016 0.016 0.016 " #" 0.008 0.008 0.008 " #" 0.005 0.005 0.005 "
+vsize=" 0.016 0.016 0.016 " #" 0.005 0.005 0.005 "
 wcoord_query=1
 z_depth_dim=400
 max_o=610000
 ranges=" -10.0 -10.0 -10.0 10.0 10.0 10.0 "
-SR=24 # 24
-K=8 #8
-P=32 # 32
+SR=24
+K=8
+P=26
 NN=2
 
 act_type="LeakyReLU"
 
 agg_intrp_order=2
 agg_distance_kernel="linear" #"avg" #"feat_intrp"
+weight_xyz_freq=2
+weight_feat_dim=8
+
 point_features_dim=32
-shpnt_jitter="uniform" #"uniform" # uniform gaussian
+shpnt_jitter="passfunc" #"uniform" # uniform gaussian
 
 which_agg_model="viewmlp"
 apply_pnt_mask=1
-shading_feature_mlp_layer0=1
-shading_feature_mlp_layer1=2
-shading_feature_mlp_layer2=0
-shading_feature_mlp_layer2_bpnet=1
-shading_feature_mlp_linear=0
-shading_feature_mlp_layer3=2 #2 原本#0 
-shading_feature_mlp_layer4=0 #0 原本 #1 yuze
+shading_feature_mlp_layer0=1 #2
+shading_feature_mlp_layer1=2 #2
+shading_feature_mlp_layer2=0 #1
+shading_feature_mlp_layer3=2 #1
 shading_alpha_mlp_layer=1
 shading_color_mlp_layer=4
 shading_feature_num=256
@@ -103,7 +92,7 @@ model='mvs_points_volumetric'
 near_plane=0.1
 far_plane=8.0
 which_ray_generation='near_far_linear' #'nerf_near_far_linear' #
-
+domain_size='1'
 dir_norm=0
 
 which_tonemap_func="off" #"gamma" #
@@ -115,7 +104,8 @@ num_pos_freqs=10
 num_viewdir_freqs=4 #6
 
 random_sample='random'
-random_sample_size=32 # 32 * 32 = 1024
+random_sample_size=56 # 32 * 32 = 1024
+
 batch_size=1
 
 plr=0.002
@@ -125,34 +115,33 @@ lr_decay_iters=1000000
 lr_decay_exp=0.1
 
 gpu_ids='0'
+
 checkpoints_dir="${nrCheckpoint}/scannet/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
-save_predict_label=1 
-save_label_iter=5000 #预测一次
 save_iter_freq=10000
 save_point_freq=10000 #301840 #1
-maximum_step=400000 #500000 #250000 #800000
+maximum_step=200000 #500000 #250000 #800000
 
 niter=10000 #1000000
 niter_decay=10000 #250000
 n_threads=2
 
 train_and_test=0 #1
-test_num=25
-test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
+test_num=10
+test_freq=50000 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=100
 test_num_step=1
 
-prob_freq=1000000 #10001
-prob_num_step=1000000
+prob_freq=10000000 #10001
+prob_num_step=100
 prob_kernel_size=" 3 3 3 1 1 1 "
 prob_tiers=" 40000 120000 "
-#prob_mode=0 # 0, n, 1 t, 10 t&n
+prob_mode=0 # 0, n, 1 t, 10 t&n
 prob_thresh=0.7
 prob_mul=0.4
 
-#zero_epsilon=1e-3
+zero_epsilon=1e-3
 
 visual_items='coarse_raycolor gt_image '
 zero_one_loss_items='conf_coefficient' #regularize background to be either 0 or 1
@@ -160,22 +149,22 @@ zero_one_loss_weights=" 0.0001 "
 sparse_loss_weight=0
 
 color_loss_weights=" 1.0 0.0 0.0 "
-color_loss_items="ray_masked_coarse_raycolor ray_miss_coarse_raycolor coarse_raycolor"
-test_color_loss_items="coarse_raycolor ray_miss_coarse_raycolor ray_masked_coarse_raycolor"
+color_loss_items='ray_masked_coarse_raycolor ray_miss_coarse_raycolor coarse_raycolor'
+test_color_loss_items='coarse_raycolor ray_miss_coarse_raycolor ray_masked_coarse_raycolor'
 
 
 
 bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
 
-
-
 cd run
+
+
 
 python3 test_ft.py \
         --experiment $name \
-        --img_wh $img_wh\
         --scan $scan \
+        --img_wh $img_wh\
         --data_root $data_root \
         --dataset_name $dataset_name \
         --model $model \
@@ -239,7 +228,6 @@ python3 test_ft.py \
         --shading_feature_mlp_layer0 $shading_feature_mlp_layer0 \
         --shading_feature_mlp_layer1 $shading_feature_mlp_layer1 \
         --shading_feature_mlp_layer2 $shading_feature_mlp_layer2 \
-        --shading_feature_mlp_layer2_bpnet $shading_feature_mlp_layer2_bpnet\
         --shading_feature_mlp_layer3 $shading_feature_mlp_layer3 \
         --shading_feature_num $shading_feature_num \
         --dist_xyz_freq $dist_xyz_freq \
@@ -294,7 +282,5 @@ python3 test_ft.py \
         --prob_kernel_size $prob_kernel_size \
         --prob_tiers $prob_tiers \
         --query_size $query_size \
-        --debug \
-        --predict_semantic $predict_semantic \
-        --semantic_guidance $semantic_guidance\
-        --train_step $train_step
+        --train_step $train_step\
+        --debug
