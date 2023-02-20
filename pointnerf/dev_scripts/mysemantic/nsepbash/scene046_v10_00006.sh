@@ -8,7 +8,7 @@ nrDataRoot="../../data_src"
 name='scene046_step50sparse_20000points_scale10_vsize0.016'
 
 
-resume_iter=15000 #latest
+resume_iter=best #latest
 train_step=50
 data_root="${nrDataRoot}/scannet/scans"
 scan="scene0046_00sparse"

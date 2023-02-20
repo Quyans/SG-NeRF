@@ -5,8 +5,8 @@ nrCheckpoint="../../checkpoints"
 nrDataRoot="../../data_src"
 
 # name='scene024102_Semantic_step50_debug2'
-name='scene24102_step50_nostep_sparse_20000points_scale10_vsize0.016'
-
+# name='scene24102_step50_nostep_sparse_20000points_scale10_vsize0.016'
+name="scene24102_step50_nostep_sparse_20000points_scale10_vsize0.016"
 
 resume_iter=best #latest
 train_step=50
@@ -142,7 +142,7 @@ train_and_test=0 #1
 test_num=25
 test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=10
-test_num_step=1
+test_num_step=10
 
 prob_freq=1000000 #10001
 prob_num_step=1000000

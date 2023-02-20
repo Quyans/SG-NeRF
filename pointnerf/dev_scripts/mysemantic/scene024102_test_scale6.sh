@@ -5,7 +5,7 @@ nrCheckpoint="../../checkpoints"
 nrDataRoot="../../data_src"
 
 # name='scene024102_Semantic_step50_debug2'
-name='scene24102_step50_nostep_sparse_20000points_scale6'
+name='scene24102_step50_nostep_sparse_20000points_scale6_blur'
 # name="scene24102_step50_nostep_sparse_20000points"
 
 resume_iter=best #latest
@@ -43,7 +43,7 @@ pre_d_est="${nrCheckpoint}/MVSNet/model_000014.ckpt"
 manual_std_depth=0.0
 depth_conf_thresh=0.8
 geo_cnsst_num=0
-edge_filter=10 # pixels crop out at image edge
+edge_filter=0 # pixels crop out at image edge
 
 appr_feature_str0="imgfeat_0_0123 dir_0 point_conf"
 point_conf_mode="1" # 0 for only at features, 1 for multi at weight
@@ -62,7 +62,7 @@ depth_limit_scale=0
 vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
-vsize=" 0.008 0.008 0.008 " #" 0.005 0.005 0.005 "
+vsize=" 0.015 0.015 0.015 " #" 0.005 0.005 0.005 "
 wcoord_query=1
 z_depth_dim=400
 max_o=610000
@@ -142,7 +142,7 @@ train_and_test=0 #1
 test_num=50
 test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=40
-test_num_step=110
+test_num_step=10
 
 prob_freq=1000000 #10001
 prob_num_step=1000000

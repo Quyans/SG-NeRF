@@ -169,8 +169,7 @@ bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
 
 
-
-cd run
+cd ./run
 
 python3 test_ft.py \
         --experiment $name \

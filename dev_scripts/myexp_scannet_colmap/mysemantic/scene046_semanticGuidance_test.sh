@@ -19,7 +19,7 @@ arch_3d=MinkUNet18A
 classes=20
 predict_semantic=0
 
-
+img_wh="320 240"
 load_points=1
 feat_grad=1
 conf_grad=1
@@ -300,7 +300,7 @@ python3 test_ft.py \
         --arch_3d $arch_3d \
         --classes $classes \
         --predict_semantic $predict_semantic\
-        
+        --img_wh $img_wh
         # --semantic_guidance $semantic_guidance
         
         
