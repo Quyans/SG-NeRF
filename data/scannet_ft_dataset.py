@@ -266,7 +266,16 @@ class ScannetFtDataset(BaseDataset):
             help="train step"
         )
 
+        parser.add_argument(
+            '--test_list',
+            type=int,
+            nargs='+',
+            default=None,
+            # default=(320, 240),
+            help='resize target of the image'
+        )
         return parser
+        
 
     def normalize_cam(self, w2cs, c2ws):
         index = 0
@@ -323,13 +332,25 @@ class ScannetFtDataset(BaseDataset):
                 self.train_id_list = self.all_id_list[::step]
                 # self.train_id_list = [5,124,497]
 
-                self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+                print(self.train_id_list)
+                if self.opt.test_list is None:
+                    self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+                else:
+                    print("长度",len(self.opt.test_list))
+                    print(self.opt.test_list)
+                    self.test_id_list = self.opt.test_list
             else:  # nsvf configuration
                 step=self.opt.train_step#5
                 self.train_id_list = self.all_id_list[::step]
                 # self.train_id_list = [5,124,497]
 
-                self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+                
+                if self.opt.test_list is None:
+                    self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+                else:
+                    print("长度",len(self.opt.test_list))
+                    print(self.opt.test_list)
+                    self.test_id_list = self.opt.test_list
                 # self.test_id_list = [0,300,400]
         else:
             #assert self.split == "test", 'split==train! error!cant train at new camera trajectory'
@@ -340,6 +361,8 @@ class ScannetFtDataset(BaseDataset):
             # self.test_id_list = self.all_id_list[::1]
             # self.train_id_list = []
         print("all_id_list",len(self.all_id_list))
+
+
         print("test_id_list",len(self.test_id_list), self.test_id_list)
         print("train_id_list",len(self.train_id_list))
         

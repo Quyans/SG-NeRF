@@ -254,6 +254,14 @@ class ScannetFtDataset(BaseDataset):
             default=50,
             help="train step"
         )
+        parser.add_argument(
+            '--test_list',
+            type=int,
+            nargs='+',
+            default=(-1),
+            help="set the test id list"
+        )
+
         return parser
 
     def normalize_cam(self, w2cs, c2ws):
@@ -307,23 +315,31 @@ class ScannetFtDataset(BaseDataset):
             # self.train_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (((i % 100) > 19) and ((i % 100) < 81 or (i//100+1)*100>=len(self.all_id_list)))]
             step=self.opt.train_step
             self.train_id_list = self.all_id_list[::step]
-            self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
-            # self.test_id_list = [140,180,220,260,300,340,380,660,700,740,780,820,860,940,980,1020,1060,1100,1140,1260,1300]
 
-            #self.test_id_list = [100,194,237,494,658,786,881,921] 738
+
+
+            if self.opt.test_list[0] == -1:
+                    print(-1,"!!!!!!!!!!!!!!!!!!!!!!!")
+                    self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+            else:
+                print("长度",len(self.opt.test_list))
+                print(self.opt.test_list)
+                self.test_id_list = self.opt.test_list
         else:  # nsvf configuration
-            step=self.opt.train_step
+            step=self.opt.train_step#5
             self.train_id_list = self.all_id_list[::step]
-            self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
-            # self.test_id_list = [100,194,237,494,658,786,881,921] #738
+            # self.train_id_list = [5,124,497]
+
             
-            self.test_id_list = [1017,1182,1237,1292,1347,1402,1457,1512] #710
-            # self.test_id_list = [1118] #241
-            # 1118
-            # 1017,1182,1237,1292,1347,1402,1457,1512
-            # self.test)id
-            # # scene046
-            # self.test_id_list = [140,180,220,260,300,340,380,660,700,740,780,820,860,940,980,1020,1060,1100,1140,1260,1300]
+            if self.opt.test_list[0] == -1:
+                print(-1,"!!!!!!!!!!!!!!!!!!!!!!!")
+                self.test_id_list = [self.all_id_list[i] for i in range(len(self.all_id_list)) if (i % step) !=0] if self.opt.test_num_step != 1 else self.all_id_list
+            else:
+                print("长度",len(self.opt.test_list))
+                print(self.opt.test_list)
+                self.test_id_list = self.opt.test_list
+
+       
 
         print("all_id_list",len(self.all_id_list))
         print("test_id_list",len(self.test_id_list), self.test_id_list)

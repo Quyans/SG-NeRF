@@ -437,7 +437,7 @@ class BPNet(nn.Module):
                 links.insert(0,link)
                 # links.append(link)
                 continue
-
+            
             f = random.sample(self.datasetList[v], k=1)[0][0]
             image_pa = f
             
@@ -509,7 +509,7 @@ class BPNet(nn.Module):
                 self.datasetList.append(frames_path[v * partial:])
                 break
             self.datasetList.append(frames_path[v * partial:v * partial + partial])
-
+        
         colors, links,labels2d = self.get_2d(locs_in,image_path)
         
         locs = self.prevoxel_transforms(locs_in) if self.aug else locs_in

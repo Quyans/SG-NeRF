@@ -1,29 +1,44 @@
 #!/bin/bash
-nrCheckpoint="../checkpoints"
-nrDataRoot="../data_src"
-name='lego'
 
-resume_iter=best #
-save_point_freq=40
 
-data_root="${nrDataRoot}/nerf/nerf_synthetic/"
-scan="lego"
+nrCheckpoint="../../checkpoints"
+nrDataRoot="../../data_src"
 
-load_points=0
+# name='scene024102_Semantic_step50_debug2'
+name='scene24102_step50_nostep_sparse_20000points_scale10_vsize0.016'
+# name='scene24102_step50_nostep_sparse_20000points_scale6'
+# name="scene24102_step50_nostep_sparse_20000points"
+
+
+# test_list="5 20 131 461 553"
+test_list=-1
+resume_iter=5000 #latest
+
+data_root="${nrDataRoot}/scannet/scans"
+scan="scene0241_02sparse"
+
+img_wh="320 240"
+predict_semantic=1
+semantic_guidance=1
+layers_2d=34
+arch_3d=MinkUNet18A
+classes=20
+
+
+load_points=1
 feat_grad=1
 conf_grad=1
-dir_grad=1
+dir_grad=0
 color_grad=1
-vox_res=320
+vox_res=900
 normview=0
-prune_thresh=0.1
-prune_iter=10001
-prune_max_iter=130000
+prune_thresh=-1
+prune_iter=-1 #10000
 
 feedforward=0
 ref_vid=0
 bgmodel="no" #"plane"
-depth_occ=1
+depth_occ=0
 depth_vid="0"
 trgt_id=0
 manual_depth_view=1
@@ -32,12 +47,13 @@ pre_d_est="${nrCheckpoint}/MVSNet/model_000014.ckpt"
 manual_std_depth=0.0
 depth_conf_thresh=0.8
 geo_cnsst_num=0
-full_comb=1
+edge_filter=0 # pixels crop out at image edge
+
 appr_feature_str0="imgfeat_0_0123 dir_0 point_conf"
 point_conf_mode="1" # 0 for only at features, 1 for multi at weight
 point_dir_mode="1" # 0 for only at features, 1 for color branch
 point_color_mode="1" # 0 for only at features, 1 for color branch
-default_conf=0.15 #1000
+default_conf=-1
 
 agg_feat_xyz_mode="None"
 agg_alpha_xyz_mode="None"
@@ -45,39 +61,37 @@ agg_color_xyz_mode="None"
 feature_init_method="rand" #"rand" # "zeros"
 agg_axis_weight=" 1. 1. 1."
 agg_dist_pers=20
-radius_limit_scale=4
+radius_limit_scale=10
 depth_limit_scale=0
-alpha_range=0
-
 vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
-vsize=" 0.004 0.004 0.004 " #" 0.005 0.005 0.005 "
+vsize=" 0.016 0.016 0.016 " #" 0.008 0.008 0.008 " #" 0.005 0.005 0.005 "
 wcoord_query=1
 z_depth_dim=400
-max_o=830000 #2000000
-ranges=" -0.638 -1.141 -0.346 0.634 1.149 1.141 "
-SR=80
-K=8
-P=9 #120
+max_o=610000
+ranges=" -10.0 -10.0 -10.0 10.0 10.0 10.0 "
+SR=24 # 24
+K=8 #8
+P=32 # 32
 NN=2
 
 act_type="LeakyReLU"
 
 agg_intrp_order=2
 agg_distance_kernel="linear" #"avg" #"feat_intrp"
-weight_xyz_freq=2
-weight_feat_dim=8
-
 point_features_dim=32
 shpnt_jitter="uniform" #"uniform" # uniform gaussian
 
 which_agg_model="viewmlp"
 apply_pnt_mask=1
-shading_feature_mlp_layer0=1 #2
-shading_feature_mlp_layer1=2 #2
-shading_feature_mlp_layer2=0 #1
-shading_feature_mlp_layer3=2 #1
+shading_feature_mlp_layer0=1
+shading_feature_mlp_layer1=2
+shading_feature_mlp_layer2=0
+shading_feature_mlp_layer2_bpnet=1
+shading_feature_mlp_linear=0
+shading_feature_mlp_layer3=2 #2 原本#0 
+shading_feature_mlp_layer4=0 #0 原本 #1 yuze
 shading_alpha_mlp_layer=1
 shading_color_mlp_layer=4
 shading_feature_num=256
@@ -87,13 +101,13 @@ dist_xyz_deno=0
 
 
 raydist_mode_unit=1
-dataset_name='nerf_synth360_ft'
+dataset_name='scannet_ft'
 pin_data_in_memory=1
 model='mvs_points_volumetric'
-near_plane=2.0
-far_plane=6.0
+near_plane=0.1
+far_plane=8.0
 which_ray_generation='near_far_linear' #'nerf_near_far_linear' #
-domain_size='1'
+
 dir_norm=0
 
 which_tonemap_func="off" #"gamma" #
@@ -105,8 +119,7 @@ num_pos_freqs=10
 num_viewdir_freqs=4 #6
 
 random_sample='random'
-
-random_sample_size=60 #48 # 32 * 32 = 1024
+random_sample_size=32 # 32 * 32 = 1024
 batch_size=1
 
 plr=0.002
@@ -115,57 +128,57 @@ lr_policy="iter_exponential_decay"
 lr_decay_iters=1000000
 lr_decay_exp=0.1
 
-gpu_ids='3'
-
-checkpoints_dir="${nrCheckpoint}/nerfsynth/"
+gpu_ids='0'
+checkpoints_dir="${nrCheckpoint}/scannet/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
+save_predict_label=1 
+save_label_iter=5000 #预测一次
 save_iter_freq=10000
 save_point_freq=10000 #301840 #1
-maximum_step=200000 #300000 #800000
+maximum_step=400000 #500000 #250000 #800000
 
 niter=10000 #1000000
 niter_decay=10000 #250000
-n_threads=1
-train_and_test=0 #1
-test_num=10
-test_freq=10000 #1200 #1200 #30184 #30184 #50000
-print_freq=40
-test_num_step=10
+n_threads=2
 
-far_thresh=-1 #0.005
-prob_freq=10001 #2000 #10001
-prob_num_step=20
+train_and_test=0 #1
+test_num=50
+test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
+print_freq=40
+test_num_step=1
+
+prob_freq=1000000 #10001
+prob_num_step=1000000
+prob_kernel_size=" 3 3 3 1 1 1 "
+prob_tiers=" 40000 120000 "
+#prob_mode=0 # 0, n, 1 t, 10 t&n
 prob_thresh=0.7
 prob_mul=0.4
-prob_kernel_size=" 3 3 3 "
-prob_tiers=" 100000 "
 
-zero_epsilon=1e-3
+#zero_epsilon=1e-3
 
-visual_items=' coarse_raycolor gt_image '
-#visual_items_additional=('coarse_mask' 'fine_mask') # show additional rendered items, here adding rendered masks
+visual_items='coarse_raycolor gt_image '
 zero_one_loss_items='conf_coefficient' #regularize background to be either 0 or 1
 zero_one_loss_weights=" 0.0001 "
 sparse_loss_weight=0
 
 color_loss_weights=" 1.0 0.0 0.0 "
-color_loss_items='ray_masked_coarse_raycolor ray_miss_coarse_raycolor coarse_raycolor'
-test_color_loss_items='coarse_raycolor ray_miss_coarse_raycolor ray_masked_coarse_raycolor'
+color_loss_items="ray_masked_coarse_raycolor ray_miss_coarse_raycolor coarse_raycolor"
+test_color_loss_items="coarse_raycolor ray_miss_coarse_raycolor ray_masked_coarse_raycolor"
 
-vid=250000
+
 
 bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
 
+
+
 cd run
 
-for i in $(seq 1 $prob_freq $maximum_step)
-
-do
-#python3 gen_pnts.py \
-python3 train_ft.py \
+python3 test_ft.py \
         --experiment $name \
+        --img_wh $img_wh\
         --scan $scan \
         --data_root $data_root \
         --dataset_name $dataset_name \
@@ -196,6 +209,8 @@ python3 train_ft.py \
         --test_freq $test_freq \
         --test_num_step $test_num_step \
         --test_color_loss_items $test_color_loss_items \
+        --prob_freq $prob_freq \
+        --prob_num_step $prob_num_step \
         --print_freq $print_freq \
         --bg_color $bg_color \
         --split $split \
@@ -228,6 +243,7 @@ python3 train_ft.py \
         --shading_feature_mlp_layer0 $shading_feature_mlp_layer0 \
         --shading_feature_mlp_layer1 $shading_feature_mlp_layer1 \
         --shading_feature_mlp_layer2 $shading_feature_mlp_layer2 \
+        --shading_feature_mlp_layer2_bpnet $shading_feature_mlp_layer2_bpnet\
         --shading_feature_mlp_layer3 $shading_feature_mlp_layer3 \
         --shading_feature_num $shading_feature_num \
         --dist_xyz_freq $dist_xyz_freq \
@@ -267,25 +283,22 @@ python3 train_ft.py \
         --normview $normview \
         --prune_thresh $prune_thresh \
         --prune_iter $prune_iter \
-        --full_comb $full_comb \
         --sparse_loss_weight $sparse_loss_weight \
+        --zero_one_loss_items $zero_one_loss_items \
+        --zero_one_loss_weights $zero_one_loss_weights \
         --default_conf $default_conf \
-        --prob_freq $prob_freq \
-        --prob_num_step $prob_num_step \
+        --edge_filter $edge_filter \
+        --vsize $vsize \
+        --wcoord_query $wcoord_query \
+        --ranges $ranges \
+        --z_depth_dim $z_depth_dim \
+        --max_o $max_o \
         --prob_thresh $prob_thresh \
         --prob_mul $prob_mul \
         --prob_kernel_size $prob_kernel_size \
         --prob_tiers $prob_tiers \
-        --alpha_range $alpha_range \
-        --ranges $ranges \
-        --vid $vid \
-        --vsize $vsize \
-        --wcoord_query $wcoord_query \
-        --max_o $max_o \
-        --zero_one_loss_items $zero_one_loss_items \
-        --zero_one_loss_weights $zero_one_loss_weights \
-        --prune_max_iter $prune_max_iter \
-        --far_thresh $far_thresh \
-        --debug
-
-done
+        --query_size $query_size \
+        --debug \
+        --predict_semantic $predict_semantic \
+        --semantic_guidance $semantic_guidance \
+        --test_list $test_list
