@@ -142,7 +142,7 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, l
     height = dataset.height
     width = dataset.width
     visualizer.reset()
-    count = 0;
+    count = 0
     for i in range(0, total_num, opt.test_num_step): # 1 if test_steps == 10000 else opt.test_num_step
         data = dataset.get_item(i)
         raydir = data['raydir'].clone()
@@ -331,7 +331,7 @@ def main():
 
     fg_masks = None
     test_bg_info = None
-    if opt.bgmodel.endswith("plane"):
+    if opt.bgmodel.endswith("plane"):  #False
         test_dataset = create_dataset(test_opt)
         bg_ray_test_lst = create_all_bg(test_dataset, model, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst)
         test_bg_info = [img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, fg_masks, bg_ray_test_lst]

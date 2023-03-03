@@ -5,17 +5,13 @@ nrCheckpoint="../../checkpoints"
 nrDataRoot="../../data_src"
 
 # name='scene024102_Semantic_step50_debug2'
-name='scene24102_step50_nostep_sparse_20000points_scale10_vsize0.016'
-# name='scene24102_step50_nostep_sparse_20000points_scale6'
-# name="scene24102_step50_nostep_sparse_20000points"
+name='scene710step50sparse_20000points_scale10_vsize0.016'
 
-
-# test_list="5 20 131 461 553"
-test_list="76 114 330 1067"
-resume_iter=325000 #latest
-
+test_list=-1
+resume_iter=300000 #latest
+train_step=50
 data_root="${nrDataRoot}/scannet/scans"
-scan="scene0241_02sparse"
+scan="scene0710_00sparse"
 
 img_wh="320 240"
 predict_semantic=1
@@ -143,10 +139,10 @@ niter_decay=10000 #250000
 n_threads=2
 
 train_and_test=0 #1
-test_num=50
+test_num=25
 test_freq=500000 #  #100 #1200 #1200 #30184 #30184 #50000
-print_freq=40
-test_num_step=1
+print_freq=10
+test_num_step=5
 
 prob_freq=1000000 #10001
 prob_num_step=1000000
@@ -173,8 +169,7 @@ bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
 
 
-
-cd run
+cd ./run
 
 python3 test_ft.py \
         --experiment $name \
@@ -300,5 +295,6 @@ python3 test_ft.py \
         --query_size $query_size \
         --debug \
         --predict_semantic $predict_semantic \
-        --semantic_guidance $semantic_guidance \
+        --semantic_guidance $semantic_guidance\
+        --train_step $train_step \
         --test_list $test_list

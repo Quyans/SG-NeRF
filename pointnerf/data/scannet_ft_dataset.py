@@ -258,7 +258,7 @@ class ScannetFtDataset(BaseDataset):
             '--test_list',
             type=int,
             nargs='+',
-            default=(-1),
+            default=[-1],
             help="set the test id list"
         )
 
