@@ -26,7 +26,8 @@ def convert(x, min_value, max_value, h, w):
     x = x.transpose(0, -1)[None]
     x = torch.nn.functional.interpolate(x, (w, h), mode='bilinear', align_corners=False)
     x = x.squeeze(0).transpose(0, -1).contiguous()
-    return ((x - min_value) / (max_value - min_value)).detach().clamp(0, 1).cpu().numpy()
+    # return ((x - min_value) / (max_value - min_value)).detach().clamp(0, 1).cpu().numpy()
+    return x.numpy()
 
 def custom_meshgrid(*args):
     # ref: https://pytorch.org/docs/stable/generated/torch.meshgrid.html?highlight=meshgrid#torch.meshgrid
@@ -153,8 +154,8 @@ class Camera:
 
 class NeRFGUI:
     def __init__(self, model,dataset,visualizer,opt):
-        self.W = 320
-        self.H = 240
+        self.W = 640
+        self.H = 480
         self.cam = Camera(self.W, self.H, fovy=45)
 
         self.model = model
@@ -173,7 +174,7 @@ class NeRFGUI:
         self.inited = False
 
         self.dynamic_resolution = True
-        self.downscale = 1
+        self.downscale = 0.1
 
         dpg.create_context()
         self.register_dpg()
@@ -299,25 +300,46 @@ class NeRFGUI:
             starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
             starter.record()
 
+            
+            H = int(self.H * self.downscale)
+            W = int(self.W * self.downscale)
+
             model = self.model
             visualizer = self.visualizer
             opt = self.opt
+
+            opt.img_wh = [W,H]
+
+            # ori_img_shape = list(self.transform(img).shape)  # (4, h, w)
+            # self.intrinsic[0, :] *= (self.width / ori_img_shape[2])
+            # self.intrinsic[1, :] *= (self.height / ori_img_shape[1])
+
+
             dataset = self.dataset
+            dataset.img_wh = [W,H]
+            dataset.intrinsic[0, :] *= (W/ dataset.width)
+            dataset.intrinsic[1, :] *= (H/ dataset.height)
+            dataset.height = H
+            dataset.width = W
+            
+
 
             total_num = dataset.total
             print("test set size {}, interval {}".format(total_num, opt.test_num_step)) # 1 if test_steps == 10000 else opt.test_num_step
             patch_size = opt.random_sample_size
             chunk_size = patch_size * patch_size
+            
+            
 
-            height = dataset.height
-            width = dataset.width
+            # height = dataset.height
+            # width = dataset.width
             visualizer.reset()
             count = 0
             
             data = dataset.gui_item(self.cam.pose())
             raydir = data['raydir'].clone()
             pixel_idx = data['pixel_idx'].view(data['pixel_idx'].shape[0], -1, data['pixel_idx'].shape[3]).clone()
-            edge_mask = torch.zeros([height, width], dtype=torch.bool)
+            edge_mask = torch.zeros([H, W], dtype=torch.bool)
             edge_mask[pixel_idx[0,...,1].to(torch.long), pixel_idx[0,...,0].to(torch.long)] = 1
             edge_mask=edge_mask.reshape(-1) > 0
             np_edge_mask=edge_mask.numpy().astype(bool)
@@ -354,7 +376,7 @@ class NeRFGUI:
                         if value is None or key=="gt_image":
                             continue
                         chunk = value.cpu().numpy()
-                        visuals[key] = np.zeros((height, width, 3)).astype(chunk.dtype)
+                        visuals[key] = np.zeros((H, W, 3)).astype(chunk.dtype)
                         visuals[key][chunk_pixel_id[0,...,1], chunk_pixel_id[0,...,0], :] = chunk
                 else:
                     for key, value in curr_visuals.items():
@@ -380,11 +402,11 @@ class NeRFGUI:
             #     visuals['gt_mask'][np_edge_mask,:] = tmpgts['gt_mask']
 
             if 'ray_masked_coarse_raycolor' in model.visual_names:
-                visuals['ray_masked_coarse_raycolor'] = np.copy(visuals["coarse_raycolor"]).reshape(height, width, 3)
+                visuals['ray_masked_coarse_raycolor'] = np.copy(visuals["coarse_raycolor"]).reshape(H, W, 3)
                 print(visuals['ray_masked_coarse_raycolor'].shape, ray_masks.cpu().numpy().shape)
-                visuals['ray_masked_coarse_raycolor'][ray_masks.view(height, width).cpu().numpy() <= 0,:] = 0.0
+                visuals['ray_masked_coarse_raycolor'][ray_masks.view(H, W).cpu().numpy() <= 0,:] = 0.0
             if 'ray_depth_masked_coarse_raycolor' in model.visual_names:
-                visuals['ray_depth_masked_coarse_raycolor'] = np.copy(visuals["coarse_raycolor"]).reshape(height, width, 3)
+                visuals['ray_depth_masked_coarse_raycolor'] = np.copy(visuals["coarse_raycolor"]).reshape(H, W, 3)
                 visuals['ray_depth_masked_coarse_raycolor'][model.output["ray_depth_mask"][0].cpu().numpy() <= 0] = 0.0
 
             # if 'ray_depth_masked_gt_image' in model.visual_names:
@@ -395,20 +417,21 @@ class NeRFGUI:
             #     visuals['gt_image_ray_masked'][ray_masks.view(height, width).cpu().numpy() <= 0,:] = 0.0
 
 
-            img_color = img = np.array(np.copy(visuals["coarse_raycolor"]))
-            # img_color = convert(img_color, 0, 1, self.H, self.W)
+            img_color  = torch.from_numpy(np.array(np.copy(visuals["coarse_raycolor"])))
+
+            img_color = convert(img_color, 0, 1, self.H, self.W)
             
 
             # img_depth = np.copy(visuals["coarse_raydepth"]).reshape(height, width, 3)
 
 
             # update dynamic resolution
-            # if self.dynamic_resolution:
-            #     # max allowed infer time per-frame is 200 ms
-            #     full_t = t / (self.downscale ** 2)
-            #     downscale = min(1, max(1/4, math.sqrt(100 / full_t)))
-            #     if downscale > self.downscale * 1.2 or downscale < self.downscale * 0.8:
-            #         self.downscale = downscale
+            if self.dynamic_resolution:
+                # max allowed infer time per-frame is 200 ms
+                full_t = t / (self.downscale ** 2)
+                downscale = min(1, max(1/10, math.sqrt(100 / full_t)))
+                if downscale > self.downscale * 1.2 or downscale < self.downscale * 0.8:
+                    self.downscale = downscale
 
             if self.need_update:
                     self.render_buffer = img_color
@@ -426,7 +449,7 @@ class NeRFGUI:
             for key, value in visuals.items():
                 if key in opt.visual_items:
                     visualizer.print_details("{}:{}".format(key, visuals[key].shape))
-                    visuals[key] = visuals[key].reshape(height, width, 3)
+                    visuals[key] = visuals[key].reshape(H, W, 3)
 
 
             print("num.{} in {} cases: time used: {} s".format(0, total_num // opt.test_num_step, time.time() - stime), " at ", visualizer.image_dir)
@@ -685,11 +708,11 @@ def main():
             fmt.END)
     visualizer = Visualizer(opt)
     train_dataset = create_dataset(opt)
+    # 这里有影响
+    # opt.img_wh=[32,24]
     img_lst=None
     with torch.no_grad():
         print(opt.checkpoints_dir + opt.name + "/*_net_ray_marching.pth")
-        if opt.bgmodel.endswith("plane"):
-            _, _, _, _, _, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst = gen_points_filter_embeddings(train_dataset, visualizer, opt)
 
         resume_dir = os.path.join(opt.checkpoints_dir, opt.name)
         if opt.resume_iter == "best":
@@ -711,7 +734,9 @@ def main():
         opt.is_train=True
 
     model = create_model(opt)
+    # opt.img_wh=[32,24] 有影响
     model.setup(opt, train_len=len(train_dataset))
+    # opt.img_wh=[32,24] 有影响
     # create test loader
     test_opt = copy.deepcopy(opt)
     test_opt.is_train = False
@@ -733,9 +758,11 @@ def main():
         test_opt.split = "test"
         test_opt.name = opt.name + "/test_{}".format(resume_iter)
         test_opt.test_num_step = opt.test_num_step
+        
         test_dataset = create_dataset(test_opt)
         model.opt.is_train = 0
         model.opt.no_loss = 1
+        # test_opt.img_wh=[32,24]
         model.eval()
 
         gui = NeRFGUI(model=model,visualizer=visualizer,dataset=test_dataset,opt=test_opt)
