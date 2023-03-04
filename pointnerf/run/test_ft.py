@@ -169,7 +169,7 @@ def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=True, l
             data["pixel_idx"] = pixel_idx[:, start:end, :]
             model.set_input(data)
 
-            if opt.bgmodel.endswith("plane"):
+            if opt.bgmodel.endswith("plane"):  #False
                 img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, fg_masks, bg_ray_lst = bg_info
                 if len(bg_ray_lst) > 0:
                     bg_ray_all = bg_ray_lst[data["id"]]

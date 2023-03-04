@@ -1,11 +1,24 @@
+import sys
+import os
+import pathlib
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.absolute(), '..'))
 import math
 import torch
 import numpy as np
 import dearpygui.dearpygui as dpg
 from scipy.spatial.transform import Rotation as R
 import pickle
-import os
+
 import random
+
+
+from data import create_data_loader, create_dataset
+from models import create_model
+from utils.visualizer import Visualizer
+from utils import format as fmt
+import copy
+import time
+from options import TrainOptions
 
 device = 'cuda:0'
 
@@ -67,10 +80,21 @@ class Camera:
         self.roll = np.array([0, 0, 1], dtype=np.float32)
         # self.scalar = 1
         
-        self.T = np.array([[1, 0, 0, 0],
-                           [0, -1, 0, 0],
-                           [0, 0, -1, 0],
+        # self.T = np.array([[1, 0, 0, 0],
+        #                    [0, -1, 0, 0],
+        #                    [0, 0, -1, 0],
+        #                    [0, 0, 0, 1]], dtype=np.float32)
+
+        self.T = np.array([[-0.980738, -0.099445, -0.099445,  1.226757],
+                           [-0.193549, 0.378740, -0.905039, 2.732021],
+                           [0.026327, -0.920145, -0.390692, 1.377719],
                            [0, 0, 0, 1]], dtype=np.float32)
+
+        # # 第一张的位姿
+        # -0.980738 -0.099445-0.099445 1.226757
+        # -0.193549 0.378740 -0.905039 2.732021
+        # 0.026327 -0.920145 -0.390692 1.377719
+        # 0.000000 0.000000 0.000000 1.000000
 
     def pose(self):
         return self.T
@@ -128,13 +152,20 @@ class Camera:
         self.fovy = self.fovy * (1 + d * 0.01) 
 
 class NeRFGUI:
-    def __init__(self, system):
-        self.W = 500
-        self.H = 300
+    def __init__(self, model,dataset,visualizer,opt):
+        self.W = 320
+        self.H = 240
         self.cam = Camera(self.W, self.H, fovy=45)
 
-        self.system = system 
+        self.model = model
+        self.dataset = dataset
+        self.visualizer = visualizer
+        self.opt = opt
+
+        self.roughW = 32
+        self.roughH = 24
         
+
         self.render_buffer = np.zeros((self.W, self.H, 3), dtype=np.float32)
         self.need_update = True # camera moved, should reset accumulation
         self.spp = 1 # sample per pixel
@@ -147,6 +178,7 @@ class NeRFGUI:
         dpg.create_context()
         self.register_dpg()
         self.test_step()
+
 
     def __del__(self):
         dpg.destroy_context()
@@ -258,6 +290,176 @@ class NeRFGUI:
             dpg.set_value("_log_resolution", f'{int(self.downscale * self.W)}x{int(self.downscale * self.H)}')
             dpg.set_value("_log_spp", self.spp)
             dpg.set_value("_texture", self.render_buffer)
+
+    def teststep(self , test_steps=0, gen_vid=True, lpips=True):
+        
+        # if self.need_update and self.inited:
+        if self.need_update and True:
+            print("fucke")
+            starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+            starter.record()
+
+            model = self.model
+            visualizer = self.visualizer
+            opt = self.opt
+            dataset = self.dataset
+
+            total_num = dataset.total
+            print("test set size {}, interval {}".format(total_num, opt.test_num_step)) # 1 if test_steps == 10000 else opt.test_num_step
+            patch_size = opt.random_sample_size
+            chunk_size = patch_size * patch_size
+
+            height = dataset.height
+            width = dataset.width
+            visualizer.reset()
+            count = 0
+            
+            data = dataset.gui_item(self.cam.pose())
+            raydir = data['raydir'].clone()
+            pixel_idx = data['pixel_idx'].view(data['pixel_idx'].shape[0], -1, data['pixel_idx'].shape[3]).clone()
+            edge_mask = torch.zeros([height, width], dtype=torch.bool)
+            edge_mask[pixel_idx[0,...,1].to(torch.long), pixel_idx[0,...,0].to(torch.long)] = 1
+            edge_mask=edge_mask.reshape(-1) > 0
+            np_edge_mask=edge_mask.numpy().astype(bool)
+            totalpixel = pixel_idx.shape[1]
+            tmpgts = {}
+
+            visuals = None
+            stime = time.time()
+            ray_masks = []
+            for k in range(0, totalpixel, chunk_size):
+                start = k
+                end = min([k + chunk_size, totalpixel])
+                data['raydir'] = raydir[:, start:end, :]
+                data["pixel_idx"] = pixel_idx[:, start:end, :]
+                model.set_input(data)
+
+                # if opt.bgmodel.endswith("plane"):
+                #     img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, fg_masks, bg_ray_lst = bg_info
+                #     if len(bg_ray_lst) > 0:
+                #         bg_ray_all = bg_ray_lst[data["id"]]
+                #         bg_idx = data["pixel_idx"].view(-1,2)
+                #         bg_ray = bg_ray_all[:, bg_idx[:,1].long(), bg_idx[:,0].long(), :]
+                #     else:
+                #         xyz_world_sect_plane = mvs_utils.gen_bg_points(data)
+                #         bg_ray, _ = model.set_bg(xyz_world_sect_plane, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, data["plane_color"], fg_masks=fg_masks, vis=visualizer)
+                #     data["bg_ray"] = bg_ray
+
+                model.test()
+                curr_visuals = model.get_current_visuals(data=data)
+                chunk_pixel_id = data["pixel_idx"].cpu().numpy().astype(np.int32)
+                if visuals is None:
+                    visuals = {}
+                    for key, value in curr_visuals.items():
+                        if value is None or key=="gt_image":
+                            continue
+                        chunk = value.cpu().numpy()
+                        visuals[key] = np.zeros((height, width, 3)).astype(chunk.dtype)
+                        visuals[key][chunk_pixel_id[0,...,1], chunk_pixel_id[0,...,0], :] = chunk
+                else:
+                    for key, value in curr_visuals.items():
+                        if value is None or key=="gt_image":
+                            continue
+                        visuals[key][chunk_pixel_id[0,...,1], chunk_pixel_id[0,...,0], :] = value.cpu().numpy()
+                if "ray_mask" in model.output and "ray_masked_coarse_raycolor" in opt.test_color_loss_items:
+                    ray_masks.append(model.output["ray_mask"] > 0)
+            if len(ray_masks) > 0:
+                ray_masks = torch.cat(ray_masks, dim=1)
+
+            ender.record()
+            torch.cuda.synchronize()
+            t = starter.elapsed_time(ender)
+
+            
+
+
+            # if 'gt_image' in model.visual_names:
+            #     visuals['gt_image'] = gt_image
+            # if 'gt_mask' in curr_visuals:
+            #     visuals['gt_mask'] = np.zeros((height, width, 3)).astype(chunk.dtype)
+            #     visuals['gt_mask'][np_edge_mask,:] = tmpgts['gt_mask']
+
+            if 'ray_masked_coarse_raycolor' in model.visual_names:
+                visuals['ray_masked_coarse_raycolor'] = np.copy(visuals["coarse_raycolor"]).reshape(height, width, 3)
+                print(visuals['ray_masked_coarse_raycolor'].shape, ray_masks.cpu().numpy().shape)
+                visuals['ray_masked_coarse_raycolor'][ray_masks.view(height, width).cpu().numpy() <= 0,:] = 0.0
+            if 'ray_depth_masked_coarse_raycolor' in model.visual_names:
+                visuals['ray_depth_masked_coarse_raycolor'] = np.copy(visuals["coarse_raycolor"]).reshape(height, width, 3)
+                visuals['ray_depth_masked_coarse_raycolor'][model.output["ray_depth_mask"][0].cpu().numpy() <= 0] = 0.0
+
+            # if 'ray_depth_masked_gt_image' in model.visual_names:
+            #     visuals['ray_depth_masked_gt_image'] = np.copy(tmpgts['gt_image']).reshape(height, width, 3)
+            #     visuals['ray_depth_masked_gt_image'][model.output["ray_depth_mask"][0].cpu().numpy() <= 0] = 0.0
+            # if 'gt_image_ray_masked' in model.visual_names:
+            #     visuals['gt_image_ray_masked'] = np.copy(tmpgts['gt_image']).reshape(height, width, 3)
+            #     visuals['gt_image_ray_masked'][ray_masks.view(height, width).cpu().numpy() <= 0,:] = 0.0
+
+
+            img_color = img = np.array(np.copy(visuals["coarse_raycolor"]))
+            # img_color = convert(img_color, 0, 1, self.H, self.W)
+            
+
+            # img_depth = np.copy(visuals["coarse_raydepth"]).reshape(height, width, 3)
+
+
+            # update dynamic resolution
+            # if self.dynamic_resolution:
+            #     # max allowed infer time per-frame is 200 ms
+            #     full_t = t / (self.downscale ** 2)
+            #     downscale = min(1, max(1/4, math.sqrt(100 / full_t)))
+            #     if downscale > self.downscale * 1.2 or downscale < self.downscale * 0.8:
+            #         self.downscale = downscale
+
+            if self.need_update:
+                    self.render_buffer = img_color
+                    self.spp = 1
+                    self.need_update = False
+            else:
+                self.render_buffer = (self.render_buffer * self.spp + img_color) / (self.spp + 1)
+                self.spp += 1
+
+            dpg.set_value("_log_infer_time", f'{t:.4f}ms ({int(1000/t)} FPS)')
+            dpg.set_value("_log_resolution", f'{int(self.downscale * self.W)}x{int(self.downscale * self.H)}')
+            dpg.set_value("_log_spp", self.spp)
+            dpg.set_value("_texture", self.render_buffer)
+            
+            for key, value in visuals.items():
+                if key in opt.visual_items:
+                    visualizer.print_details("{}:{}".format(key, visuals[key].shape))
+                    visuals[key] = visuals[key].reshape(height, width, 3)
+
+
+            print("num.{} in {} cases: time used: {} s".format(0, total_num // opt.test_num_step, time.time() - stime), " at ", visualizer.image_dir)
+            visualizer.display_current_results(visuals, 0, opt=opt)
+
+            
+            # acc_dict = {}
+            # if "coarse_raycolor" in opt.test_color_loss_items:
+            #     loss = torch.nn.MSELoss().to("cuda")(torch.as_tensor(visuals["coarse_raycolor"], device="cuda").view(1, -1, 3), gt_image.view(1, -1, 3).cuda())
+            #     acc_dict.update({"coarse_raycolor": loss})
+            #     print("coarse_raycolor", loss, mse2psnr(loss))
+
+            # if "ray_mask" in model.output and "ray_masked_coarse_raycolor" in opt.test_color_loss_items:
+            #     masked_gt = tmpgts["gt_image"].view(1, -1, 3).cuda()[ray_masks,:].reshape(1, -1, 3)
+            #     ray_masked_coarse_raycolor = torch.as_tensor(visuals["coarse_raycolor"], device="cuda").view(1, -1, 3)[:,edge_mask,:][ray_masks,:].reshape(1, -1, 3)
+            #     loss = torch.nn.MSELoss().to("cuda")(ray_masked_coarse_raycolor, masked_gt)
+            #     acc_dict.update({"ray_masked_coarse_raycolor": loss})
+            #     visualizer.print_details("{} loss:{}, PSNR:{}".format("ray_masked_coarse_raycolor", loss, mse2psnr(loss)))
+
+            # if "ray_depth_mask" in model.output and "ray_depth_masked_coarse_raycolor" in opt.test_color_loss_items:
+            #     ray_depth_masks = model.output["ray_depth_mask"].reshape(model.output["ray_depth_mask"].shape[0], -1)
+            #     masked_gt = torch.masked_select(tmpgts["gt_image"].view(1, -1, 3).cuda(), (ray_depth_masks[..., None].expand(-1, -1, 3)).reshape(1, -1, 3))
+            #     ray_depth_masked_coarse_raycolor = torch.masked_select(torch.as_tensor(visuals["coarse_raycolor"], device="cuda").view(1, -1, 3), ray_depth_masks[..., None].expand(-1, -1, 3).reshape(1, -1, 3))
+
+            #     loss = torch.nn.MSELoss().to("cuda")(ray_depth_masked_coarse_raycolor, masked_gt)
+            #     acc_dict.update({"ray_depth_masked_coarse_raycolor": loss})
+            #     visualizer.print_details("{} loss:{}, PSNR:{}".format("ray_depth_masked_coarse_raycolor", loss, mse2psnr(loss)))
+
+            # print(acc_dict.items())
+            # visualizer.accumulate_losses(acc_dict)
+            # count+=1
+            # visualizer.print_losses(count)
+
 
         
     def register_dpg(self):
@@ -453,19 +655,107 @@ class NeRFGUI:
 
         while dpg.is_dearpygui_running():
             # update texture every frame
-            self.test_step()
+            self.teststep()
             dpg.render_dearpygui_frame()
 
-if __name__ == '__main__':
-    # import utils
-    from main import NeRF2SemanticSystem
-    from utils import import_str, label2color, seed_everything, safe_log, get_args
-    # import utils
-    path = os.environ.get('CONFIG' ,'./configs/scannet_triplane.yaml')
 
-    args = get_args(path)
-    system = NeRF2SemanticSystem(args).to(device)
+def get_latest_epoch(resume_dir):
+    os.makedirs(resume_dir, exist_ok=True)
+    str_epoch = [file.split("_")[0] for file in os.listdir(resume_dir) if file.endswith("_states.pth")]
+    int_epoch = [int(i) for i in str_epoch]
+    return None if len(int_epoch) == 0 else str_epoch[int_epoch.index(max(int_epoch))]
 
+
+def main():
+
+    torch.backends.cudnn.benchmark = True
+
+    opt = TrainOptions().parse()
+    cur_device = torch.device('cuda:{}'.format(opt.gpu_ids[0]) if opt.
+                              gpu_ids else torch.device('cpu'))
+    print("opt.color_loss_items ", opt.color_loss_items)
+
+    if opt.debug:
+        torch.autograd.set_detect_anomaly(True)
+        print(fmt.RED +
+              '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+        print('Debug Mode')
+        print(
+            '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++' +
+            fmt.END)
+    visualizer = Visualizer(opt)
+    train_dataset = create_dataset(opt)
+    img_lst=None
     with torch.no_grad():
-        gui = NeRFGUI(system)
+        print(opt.checkpoints_dir + opt.name + "/*_net_ray_marching.pth")
+        if opt.bgmodel.endswith("plane"):
+            _, _, _, _, _, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst = gen_points_filter_embeddings(train_dataset, visualizer, opt)
+
+        resume_dir = os.path.join(opt.checkpoints_dir, opt.name)
+        if opt.resume_iter == "best":
+            opt.resume_iter = "latest"
+        resume_iter = opt.resume_iter if opt.resume_iter != "latest" else get_latest_epoch(resume_dir)
+        if resume_iter is None:
+            visualizer.print_details("No previous checkpoints at iter {} !!", resume_iter)
+            exit()
+        else:
+            opt.resume_iter = resume_iter
+            visualizer.print_details('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+            visualizer.print_details('test at {} iters'.format(opt.resume_iter))
+            visualizer.print_details(f"Iter: {resume_iter}")
+            visualizer.print_details('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+        opt.mode = 2
+        opt.load_points=1
+        opt.resume_dir=resume_dir
+        opt.resume_iter = resume_iter
+        opt.is_train=True
+
+    model = create_model(opt)
+    model.setup(opt, train_len=len(train_dataset))
+    # create test loader
+    test_opt = copy.deepcopy(opt)
+    test_opt.is_train = False
+    test_opt.random_sample = 'no_crop'
+    test_opt.random_sample_size = min(48, opt.random_sample_size)
+    test_opt.batch_size = 1
+    test_opt.n_threads = 0
+    test_opt.prob = 0
+    test_opt.split = "test"
+    visualizer.reset()
+
+    fg_masks = None
+    test_bg_info = None
+        # if opt.vid > 0:
+        #     render_dataset = create_render_dataset(test_opt, opt, resume_iter, test_num_step=opt.test_num_step)
+    ############ initial test ###############
+    with torch.no_grad():
+        test_opt.nerf_splits = ["test"]
+        test_opt.split = "test"
+        test_opt.name = opt.name + "/test_{}".format(resume_iter)
+        test_opt.test_num_step = opt.test_num_step
+        test_dataset = create_dataset(test_opt)
+        model.opt.is_train = 0
+        model.opt.no_loss = 1
+        model.eval()
+
+        gui = NeRFGUI(model=model,visualizer=visualizer,dataset=test_dataset,opt=test_opt)
         gui.render()
+
+        # test(model, test_dataset, test_opt, test_bg_info, test_steps=resume_iter)
+
+
+if __name__ == '__main__':
+    # # import utils
+    # from main import NeRF2SemanticSystem
+    # from utils import import_str, label2color, seed_everything, safe_log, get_args
+    # # import utils
+    # path = os.environ.get('CONFIG' ,'./configs/scannet_triplane.yaml')
+
+    # args = get_args(path)
+    # system = NeRF2SemanticSystem(args).to(device)
+
+    # with torch.no_grad():
+    #     gui = NeRFGUI(system)
+
+    main()
+       

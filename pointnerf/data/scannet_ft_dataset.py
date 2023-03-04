@@ -688,6 +688,98 @@ class ScannetFtDataset(BaseDataset):
                 item[key] = value.unsqueeze(0)
         return item
 
+    def gui_item(self,c2w):
+        item = {}
+        # print("vid",vid)
+
+        
+        # c2w = np.loadtxt(os.path.join(self.data_dir, self.scan, "exported/pose", "{}.txt".format(vid))).astype(np.float32)
+        # w2c = np.linalg.inv(c2w)
+        intrinsic = self.intrinsic
+
+        # print("gt_image", gt_image.shape)
+        # width, height = img.shape[2], img.shape[1]
+        width, height = self.img_wh[0], self.img_wh[1]
+        camrot = (c2w[0:3, 0:3])
+        campos = c2w[0:3, 3]
+        # print("camrot", camrot, campos)
+
+        item["intrinsic"] = intrinsic
+        # item["intrinsic"] = sample['intrinsics'][0, ...]
+        item["campos"] = torch.from_numpy(campos).float()
+        item["c2w"] = torch.from_numpy(c2w).float()
+        item["camrotc2w"] = torch.from_numpy(camrot).float() # @ FLIP_Z
+        item['lightpos'] = item["campos"]
+
+        dist = np.linalg.norm(campos)
+
+        middle = dist + 0.7
+        item['middle'] = torch.FloatTensor([middle]).view(1, 1)
+        item['far'] = torch.FloatTensor([self.near_far[1]]).view(1, 1)
+        item['near'] = torch.FloatTensor([self.near_far[0]]).view(1, 1)
+        item['h'] = height
+        item['w'] = width
+        # item['id'] = id
+
+        # bounding box
+        margin = self.opt.edge_filter
+
+        subsamplesize = self.opt.random_sample_size
+        if self.opt.random_sample == "patch":
+            indx = np.random.randint(margin, width - margin - subsamplesize + 1)
+            indy = np.random.randint(margin, height - margin - subsamplesize + 1)
+            px, py = np.meshgrid(
+                np.arange(indx, indx + subsamplesize).astype(np.float32),
+                np.arange(indy, indy + subsamplesize).astype(np.float32))
+        elif self.opt.random_sample == "random":
+            px = np.random.randint(margin,
+                                   width-margin,
+                                   size=(subsamplesize,
+                                         subsamplesize)).astype(np.float32)
+            py = np.random.randint(margin,
+                                   height-margin,
+                                   size=(subsamplesize,
+                                         subsamplesize)).astype(np.float32)
+        elif self.opt.random_sample == "random2":
+            px = np.random.uniform(margin,
+                                   width - margin - 1e-5,
+                                   size=(subsamplesize,
+                                         subsamplesize)).astype(np.float32)
+            py = np.random.uniform(margin,
+                                   height - margin - 1e-5,
+                                   size=(subsamplesize,
+                                         subsamplesize)).astype(np.float32)
+        elif self.opt.random_sample == "proportional_random":
+            raise Exception("no gt_mask, no proportional_random !!!")
+        else:
+            px, py = np.meshgrid(
+                np.arange(margin, width - margin).astype(np.float32),
+                np.arange(margin, height- margin).astype(np.float32))
+        pixelcoords = np.stack((px, py), axis=-1).astype(np.float32)  # H x W x 2
+        # raydir = get_cv_raydir(pixelcoords, self.height, self.width, focal, camrot)
+        item["pixel_idx"] = pixelcoords
+        # print("pixelcoords", pixelcoords.reshape(-1,2)[:10,:])
+        raydir = get_dtu_raydir(pixelcoords, item["intrinsic"], camrot, self.opt.dir_norm > 0)
+        raydir = np.reshape(raydir, (-1, 3))
+        item['raydir'] = torch.from_numpy(raydir).float()
+
+        if self.bg_color:
+            if self.bg_color == 'random':
+                val = np.random.rand()
+                if val > 0.5:
+                    item['bg_color'] = torch.FloatTensor([1, 1, 1])
+                else:
+                    item['bg_color'] = torch.FloatTensor([0, 0, 0])
+            else:
+                item['bg_color'] = torch.FloatTensor(self.bg_color)
+
+        for key, value in item.items():
+            if not isinstance(value, str):
+                if not torch.is_tensor(value):
+                    value = torch.as_tensor(value)
+                item[key] = value.unsqueeze(0)
+
+        return item
 
 
     def get_dummyrot_item(self, idx, crop=False):
