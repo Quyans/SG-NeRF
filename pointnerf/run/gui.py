@@ -20,7 +20,13 @@ import copy
 import time
 from options import TrainOptions
 
-device = 'cuda:0'
+
+"""
+可视化pointnerf的时候 将 semantic_guidance和 predict_semantic开关设为0 并且把 shading_feature_mlp_layer2_bpnet 设为0
+SGNeRF 则相反
+
+"""
+
 
 def convert(x, min_value, max_value, h, w):
     x = x.transpose(0, -1)[None]
@@ -199,6 +205,8 @@ class NeRFGUI:
         self.semantic_fn = semantic_fn
         self.rgb_fn = lambda x, d: self.system.nerf_container.rgb_fn(x, d, radiance_param)
 
+    """
+    # 用teststep方法，此方法废弃
     def test_step(self):
         if self.need_update and self.inited:
         
@@ -298,7 +306,8 @@ class NeRFGUI:
             dpg.set_value("_log_resolution", f'{int(self.downscale * self.W)}x{int(self.downscale * self.H)}')
             dpg.set_value("_log_spp", self.spp)
             dpg.set_value("_texture", self.render_buffer)
-
+"""
+    
     def teststep(self , test_steps=0, gen_vid=True, lpips=True):
         
         # if self.need_update and self.inited:
@@ -437,10 +446,6 @@ class NeRFGUI:
 
             img_color = convert(img_color, 0, 1, self.H, self.W)
             
-
-            # img_depth = np.copy(visuals["coarse_raydepth"]).reshape(height, width, 3)
-
-
             # update dynamic resolution
             if self.dynamic_resolution:
                 # max allowed infer time per-frame is 200 ms
@@ -469,35 +474,7 @@ class NeRFGUI:
 
 
             print("num.{} in {} cases: time used: {} s".format(0, total_num // opt.test_num_step, time.time() - stime), " at ", visualizer.image_dir)
-            visualizer.display_current_results(visuals, 0, opt=opt)
-
-            
-            # acc_dict = {}
-            # if "coarse_raycolor" in opt.test_color_loss_items:
-            #     loss = torch.nn.MSELoss().to("cuda")(torch.as_tensor(visuals["coarse_raycolor"], device="cuda").view(1, -1, 3), gt_image.view(1, -1, 3).cuda())
-            #     acc_dict.update({"coarse_raycolor": loss})
-            #     print("coarse_raycolor", loss, mse2psnr(loss))
-
-            # if "ray_mask" in model.output and "ray_masked_coarse_raycolor" in opt.test_color_loss_items:
-            #     masked_gt = tmpgts["gt_image"].view(1, -1, 3).cuda()[ray_masks,:].reshape(1, -1, 3)
-            #     ray_masked_coarse_raycolor = torch.as_tensor(visuals["coarse_raycolor"], device="cuda").view(1, -1, 3)[:,edge_mask,:][ray_masks,:].reshape(1, -1, 3)
-            #     loss = torch.nn.MSELoss().to("cuda")(ray_masked_coarse_raycolor, masked_gt)
-            #     acc_dict.update({"ray_masked_coarse_raycolor": loss})
-            #     visualizer.print_details("{} loss:{}, PSNR:{}".format("ray_masked_coarse_raycolor", loss, mse2psnr(loss)))
-
-            # if "ray_depth_mask" in model.output and "ray_depth_masked_coarse_raycolor" in opt.test_color_loss_items:
-            #     ray_depth_masks = model.output["ray_depth_mask"].reshape(model.output["ray_depth_mask"].shape[0], -1)
-            #     masked_gt = torch.masked_select(tmpgts["gt_image"].view(1, -1, 3).cuda(), (ray_depth_masks[..., None].expand(-1, -1, 3)).reshape(1, -1, 3))
-            #     ray_depth_masked_coarse_raycolor = torch.masked_select(torch.as_tensor(visuals["coarse_raycolor"], device="cuda").view(1, -1, 3), ray_depth_masks[..., None].expand(-1, -1, 3).reshape(1, -1, 3))
-
-            #     loss = torch.nn.MSELoss().to("cuda")(ray_depth_masked_coarse_raycolor, masked_gt)
-            #     acc_dict.update({"ray_depth_masked_coarse_raycolor": loss})
-            #     visualizer.print_details("{} loss:{}, PSNR:{}".format("ray_depth_masked_coarse_raycolor", loss, mse2psnr(loss)))
-
-            # print(acc_dict.items())
-            # visualizer.accumulate_losses(acc_dict)
-            # count+=1
-            # visualizer.print_losses(count)
+            # visualizer.display_current_results(visuals, 0, opt=opt)
 
 
         
