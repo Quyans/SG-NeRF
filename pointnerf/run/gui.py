@@ -100,9 +100,20 @@ class Camera:
     def pose(self):
         return self.T
     
-    def intrinsics(self):
-        focal = self.H / (2 * np.tan(np.radians(self.fovy) / 2))
+    def intrinsics(self,f=None):
+
+        
+        if f==None:
+            # 变焦
+
+            # np.radians 将角度转为弧度制 因为np.tan输入是弧度
+            focal = self.H / (2 * np.tan(np.radians(self.fovy) / 2))
+        else:
+            # 固定焦距
+            focal = f
         return np.array([focal, focal, self.W // 2, self.H // 2])
+
+    
     
     def rotate_up_side(self, dx, dy):
         # rotate along camera up/side axis!
@@ -154,8 +165,8 @@ class Camera:
 
 class NeRFGUI:
     def __init__(self, model,dataset,visualizer,opt):
-        self.W = 640
-        self.H = 480
+        self.W = opt.img_wh[0]
+        self.H = opt.img_wh[1]
         self.cam = Camera(self.W, self.H, fovy=45)
 
         self.model = model
@@ -163,14 +174,10 @@ class NeRFGUI:
         self.visualizer = visualizer
         self.opt = opt
 
-        self.roughW = 32
-        self.roughH = 24
-        
-
         self.render_buffer = np.zeros((self.W, self.H, 3), dtype=np.float32)
         self.need_update = True # camera moved, should reset accumulation
         self.spp = 1 # sample per pixel
-        self.mode = 'segments' # choose from ['image', 'depth', 'segments']
+        self.mode = 'image' # choose from ['image', 'depth', 'segments']
         self.inited = False
 
         self.dynamic_resolution = True
@@ -300,30 +307,39 @@ class NeRFGUI:
             starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
             starter.record()
 
-            
-            H = int(self.H * self.downscale)
-            W = int(self.W * self.downscale)
-
             model = self.model
             visualizer = self.visualizer
             opt = self.opt
-
+           
+            H = int(self.H * self.downscale)
+            W = int(self.W * self.downscale)
             opt.img_wh = [W,H]
 
             # ori_img_shape = list(self.transform(img).shape)  # (4, h, w)
             # self.intrinsic[0, :] *= (self.width / ori_img_shape[2])
             # self.intrinsic[1, :] *= (self.height / ori_img_shape[1])
 
+         
+            if hasattr(opt,'focal'):
+                # 指定相机焦距
+                intrinsics = self.cam.intrinsics(opt.focal) * self.downscale 
+                fx, fy,cx,cy = intrinsics
+                intrinsics = np.array([[fx,0,cx],[0,fy,cy],[0,0,1]])
+            else:
+                intrinsics = self.cam.intrinsics() * self.downscale 
+                fx, fy,cx,cy = intrinsics
+                intrinsics = np.array([[fx,0,cx],[0,fy,cy],[0,0,1]])
 
+            
             dataset = self.dataset
             dataset.img_wh = [W,H]
-            dataset.intrinsic[0, :] *= (W/ dataset.width)
-            dataset.intrinsic[1, :] *= (H/ dataset.height)
+            # dataset.intrinsic[0, :] *= (W/ dataset.width)
+            # dataset.intrinsic[1, :] *= (H/ dataset.height)
+            # intrinsics = self.cam.intrinsics() * self.downscale 
+            dataset.intrinsic = intrinsics
             dataset.height = H
             dataset.width = W
             
-
-
             total_num = dataset.total
             print("test set size {}, interval {}".format(total_num, opt.test_num_step)) # 1 if test_steps == 10000 else opt.test_num_step
             patch_size = opt.random_sample_size
@@ -734,9 +750,8 @@ def main():
         opt.is_train=True
 
     model = create_model(opt)
-    # opt.img_wh=[32,24] 有影响
     model.setup(opt, train_len=len(train_dataset))
-    # opt.img_wh=[32,24] 有影响
+
     # create test loader
     test_opt = copy.deepcopy(opt)
     test_opt.is_train = False

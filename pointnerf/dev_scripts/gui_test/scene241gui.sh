@@ -158,11 +158,9 @@ split="train"
 
 cd run
 
-for i in $(seq 1 $prob_freq $maximum_step)
 
-do
 
-python3 train_ft.py \
+python3 gui.py \
         --experiment $name \
         --scan $scan \
         --img_wh $img_wh\
@@ -286,4 +284,3 @@ python3 train_ft.py \
         --train_step $train_step \
         --debug
 
-done
