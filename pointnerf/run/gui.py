@@ -11,7 +11,7 @@ import pickle
 
 import random
 
-
+from PIL import Image
 from data import create_data_loader, create_dataset
 from models import create_model
 from utils.visualizer import Visualizer
@@ -19,7 +19,10 @@ from utils import format as fmt
 import copy
 import time
 from options import TrainOptions
-
+from utils import util
+from render_vid import render_vid
+from utils.visualizer import save_image
+import imageio
 
 """
 可视化pointnerf的时候 将 semantic_guidance和 predict_semantic开关设为0 并且把 shading_feature_mlp_layer2_bpnet 设为0
@@ -27,6 +30,25 @@ SGNeRF 则相反
 
 """
 
+def to8b(x): return (255*np.clip(x, 0, 1)).astype(np.uint8)
+
+def read_image(filepath, dtype=None):
+    image = np.asarray(Image.open(filepath))
+    if dtype is not None and dtype==np.float32:
+        image = (image / 255).astype(dtype)
+    return image
+
+def gen_video(output_dir, img_dir, name, steps):
+    img_lst = []
+    for i in range(steps):
+        img_filepath = os.path.join(img_dir, '{}.png'.format(i))
+        img_arry = read_image(img_filepath, dtype=np.float32)
+        img_lst.append(img_arry)
+    stacked_imgs = [to8b(img_arry) for img_arry in img_lst]
+    filename = 'video_{}.mov'.format( name)
+    imageio.mimwrite(os.path.join(output_dir, filename), stacked_imgs, fps=20, quality=10)
+    filename = 'video_{}.gif'.format( name)
+    imageio.mimwrite(os.path.join(output_dir, filename), stacked_imgs, fps=5, format='GIF')
 
 def convert(x, min_value, max_value, h, w):
     x = x.transpose(0, -1)[None]
@@ -85,6 +107,7 @@ class Camera:
         self.up = np.array([0, 1, 0], dtype=np.float32)
         self.side = np.array([-1, 0, 0], dtype=np.float32)
         self.roll = np.array([0, 0, 1], dtype=np.float32)
+        self.focal = 0
         # self.scalar = 1
         
         # self.T = np.array([[1, 0, 0, 0],
@@ -106,6 +129,7 @@ class Camera:
     def pose(self):
         return self.T
     
+
     def intrinsics(self,f=None):
 
         
@@ -113,11 +137,12 @@ class Camera:
             # 变焦
 
             # np.radians 将角度转为弧度制 因为np.tan输入是弧度
-            focal = self.H / (2 * np.tan(np.radians(self.fovy) / 2))
+            self.focal = self.H / (2 * np.tan(np.radians(self.fovy) / 2))
         else:
             # 固定焦距
-            focal = f
-        return np.array([focal, focal, self.W // 2, self.H // 2])
+            self.focal = f
+        # self.dataset.focal = focal
+        return np.array([self.focal, self.focal, self.W // 2, self.H // 2])
 
     
     
@@ -182,6 +207,7 @@ class NeRFGUI:
 
         self.render_buffer = np.zeros((self.W, self.H, 3), dtype=np.float32)
         self.need_update = True # camera moved, should reset accumulation
+        self.gen_vid = False # generate video
         self.spp = 1 # sample per pixel
         self.mode = 'image' # choose from ['image', 'depth', 'segments']
         self.inited = False
@@ -189,9 +215,12 @@ class NeRFGUI:
         self.dynamic_resolution = True
         self.downscale = 0.1
 
+        self.save_camera_path = False
+        self.camera_path = []
+
         dpg.create_context()
         self.register_dpg()
-        self.test_step()
+        self.teststep()
 
 
     def __del__(self):
@@ -308,11 +337,19 @@ class NeRFGUI:
             dpg.set_value("_texture", self.render_buffer)
 """
     
-    def teststep(self , test_steps=0, gen_vid=True, lpips=True):
+    def teststep(self , test_steps=0, lpips=True):
         
         # if self.need_update and self.inited:
-        if self.need_update and True:
-            print("fucke")
+        if self.gen_vid:
+
+            ckpt_dir = os.path.join(self.opt.checkpoints_dir, self.opt.ckpt_name,"gui") 
+            camera_rgb_dir = os.path.join(ckpt_dir,"render_img")
+            totalView = self.renderlist(camera_rgb_dir)
+
+            
+            gen_video(ckpt_dir,camera_rgb_dir,"test",totalView)
+            self.gen_vid = False
+        elif self.need_update and True:
             starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
             starter.record()
 
@@ -346,11 +383,12 @@ class NeRFGUI:
             # dataset.intrinsic[1, :] *= (H/ dataset.height)
             # intrinsics = self.cam.intrinsics() * self.downscale 
             dataset.intrinsic = intrinsics
+            dataset.focal = self.cam.focal
             dataset.height = H
             dataset.width = W
             
             total_num = dataset.total
-            print("test set size {}, interval {}".format(total_num, opt.test_num_step)) # 1 if test_steps == 10000 else opt.test_num_step
+            
             patch_size = opt.random_sample_size
             chunk_size = patch_size * patch_size
             
@@ -360,8 +398,13 @@ class NeRFGUI:
             # width = dataset.width
             visualizer.reset()
             count = 0
+            pose = self.cam.pose()
             
-            data = dataset.gui_item(self.cam.pose())
+            if self.save_camera_path:
+                print("up pose:")
+                self.camera_path.append(pose)
+            
+            data = dataset.gui_item(pose)
             raydir = data['raydir'].clone()
             pixel_idx = data['pixel_idx'].view(data['pixel_idx'].shape[0], -1, data['pixel_idx'].shape[3]).clone()
             edge_mask = torch.zeros([H, W], dtype=torch.bool)
@@ -417,15 +460,6 @@ class NeRFGUI:
             torch.cuda.synchronize()
             t = starter.elapsed_time(ender)
 
-            
-
-
-            # if 'gt_image' in model.visual_names:
-            #     visuals['gt_image'] = gt_image
-            # if 'gt_mask' in curr_visuals:
-            #     visuals['gt_mask'] = np.zeros((height, width, 3)).astype(chunk.dtype)
-            #     visuals['gt_mask'][np_edge_mask,:] = tmpgts['gt_mask']
-
             if 'ray_masked_coarse_raycolor' in model.visual_names:
                 visuals['ray_masked_coarse_raycolor'] = np.copy(visuals["coarse_raycolor"]).reshape(H, W, 3)
                 print(visuals['ray_masked_coarse_raycolor'].shape, ray_masks.cpu().numpy().shape)
@@ -434,25 +468,16 @@ class NeRFGUI:
                 visuals['ray_depth_masked_coarse_raycolor'] = np.copy(visuals["coarse_raycolor"]).reshape(H, W, 3)
                 visuals['ray_depth_masked_coarse_raycolor'][model.output["ray_depth_mask"][0].cpu().numpy() <= 0] = 0.0
 
-            # if 'ray_depth_masked_gt_image' in model.visual_names:
-            #     visuals['ray_depth_masked_gt_image'] = np.copy(tmpgts['gt_image']).reshape(height, width, 3)
-            #     visuals['ray_depth_masked_gt_image'][model.output["ray_depth_mask"][0].cpu().numpy() <= 0] = 0.0
-            # if 'gt_image_ray_masked' in model.visual_names:
-            #     visuals['gt_image_ray_masked'] = np.copy(tmpgts['gt_image']).reshape(height, width, 3)
-            #     visuals['gt_image_ray_masked'][ray_masks.view(height, width).cpu().numpy() <= 0,:] = 0.0
-
-
             img_color  = torch.from_numpy(np.array(np.copy(visuals["coarse_raycolor"])))
-
             img_color = convert(img_color, 0, 1, self.H, self.W)
             
             # update dynamic resolution
             if self.dynamic_resolution:
                 # max allowed infer time per-frame is 200 ms
                 full_t = t / (self.downscale ** 2)
-                downscale = min(1, max(1/10, math.sqrt(100 / full_t)))
-                if downscale > self.downscale * 1.2 or downscale < self.downscale * 0.8:
-                    self.downscale = downscale
+                downscale = min(1, max(1/10, math.sqrt(20 / full_t)))
+                # if downscale > self.downscale * 1.2 or downscale < self.downscale * 0.8:
+                self.downscale = downscale
 
             if self.need_update:
                     self.render_buffer = img_color
@@ -473,10 +498,126 @@ class NeRFGUI:
                     visuals[key] = visuals[key].reshape(H, W, 3)
 
 
-            print("num.{} in {} cases: time used: {} s".format(0, total_num // opt.test_num_step, time.time() - stime), " at ", visualizer.image_dir)
+            # print(" time used: {} s".format(time.time() - stime), " at ", visualizer.image_dir)
             # visualizer.display_current_results(visuals, 0, opt=opt)
 
+    def renderlist(self,camera_rgb_dir):
+        util.mkdir(camera_rgb_dir)
 
+        model = self.model
+        print(model.device)
+        visualizer = copy.deepcopy(self.visualizer)
+        opt = copy.deepcopy(self.opt)
+    
+        H = int(self.H)
+        W = int(self.W)
+        opt.img_wh = [W,H]
+
+        # ori_img_shape = list(self.transform(img).shape)  # (4, h, w)
+        # self.intrinsic[0, :] *= (self.width / ori_img_shape[2])
+        # self.intrinsic[1, :] *= (self.height / ori_img_shape[1])
+
+    
+        if hasattr(opt,'focal'):
+            # 指定相机焦距
+            intrinsics = self.cam.intrinsics(opt.focal)
+            fx, fy,cx,cy = intrinsics
+            intrinsics = np.array([[fx,0,cx],[0,fy,cy],[0,0,1]])
+        else:
+            intrinsics = self.cam.intrinsics()
+            fx, fy,cx,cy = intrinsics
+            intrinsics = np.array([[fx,0,cx],[0,fy,cy],[0,0,1]])
+
+        
+        dataset = copy.deepcopy(self.dataset)
+        dataset.img_wh = [W,H]
+        # dataset.intrinsic[0, :] *= (W/ dataset.width)
+        # dataset.intrinsic[1, :] *= (H/ dataset.height)
+        # intrinsics = self.cam.intrinsics() * self.downscale 
+        dataset.intrinsic = intrinsics
+        dataset.focal = self.cam.focal
+        dataset.height = H
+        dataset.width = W
+
+        patch_size = opt.random_sample_size
+        chunk_size = patch_size * patch_size
+
+        visualizer.reset()
+
+        count = 0
+        pose_list = self.camera_path
+        # pose_list = [
+        #     np.array([[-0.980738, -0.099445, -0.099445,  1.226757],
+        #         [-0.193549, 0.378740, -0.905039, 2.732021],
+        #         [0.026327, -0.920145, -0.390692, 1.377719],
+        #         [0, 0, 0, 1]], dtype=np.float32),
+
+        #     np.array([[-0.9, -0.09, -0.099445,  1.226757],
+        #     [-0.193549, 0.378740, -0.905039, 1.732021],
+        #     [0.026327, -0.920145, -0.390692, 1.577719],
+        #     [0, 0, 0, 1]], dtype=np.float32)
+        # ]
+
+        for i in range(len(pose_list)):
+            pose = pose_list[i]
+            print("pose:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            print(pose)
+            data = dataset.gui_item(pose)
+            raydir = data['raydir'].clone()
+            pixel_idx = data['pixel_idx'].view(data['pixel_idx'].shape[0], -1, data['pixel_idx'].shape[3]).clone()
+            edge_mask = torch.zeros([H, W], dtype=torch.bool)
+            edge_mask[pixel_idx[0,...,1].to(torch.long), pixel_idx[0,...,0].to(torch.long)] = 1
+            edge_mask=edge_mask.reshape(-1) > 0
+            np_edge_mask=edge_mask.numpy().astype(bool)
+            totalpixel = pixel_idx.shape[1]
+
+            visuals = None
+            stime = time.time()
+            ray_masks = []
+            for k in range(0, totalpixel, chunk_size):
+                start = k
+                end = min([k + chunk_size, totalpixel])
+                data['raydir'] = raydir[:, start:end, :]
+                data["pixel_idx"] = pixel_idx[:, start:end, :]
+                model.set_input(data)
+                model.test()
+                curr_visuals = model.get_current_visuals(data=data)
+                chunk_pixel_id = data["pixel_idx"].cpu().numpy().astype(np.int32)
+                if visuals is None:
+                    visuals = {}
+                    for key, value in curr_visuals.items():
+                        if value is None or key=="gt_image":
+                            continue
+                        chunk = value.cpu().numpy()
+                        visuals[key] = np.zeros((H, W, 3)).astype(chunk.dtype)
+                        visuals[key][chunk_pixel_id[0,...,1], chunk_pixel_id[0,...,0], :] = chunk
+                else:
+                    for key, value in curr_visuals.items():
+                        if value is None or key=="gt_image":
+                            continue
+                        visuals[key][chunk_pixel_id[0,...,1], chunk_pixel_id[0,...,0], :] = value.cpu().numpy()
+                if "ray_mask" in model.output and "ray_masked_coarse_raycolor" in opt.test_color_loss_items:
+                    ray_masks.append(model.output["ray_mask"] > 0)
+            if len(ray_masks) > 0:
+                ray_masks = torch.cat(ray_masks, dim=1)
+            torch.cuda.synchronize()
+
+            if 'ray_masked_coarse_raycolor' in model.visual_names:
+                visuals['ray_masked_coarse_raycolor'] = np.copy(visuals["coarse_raycolor"]).reshape(H, W, 3)
+                print(visuals['ray_masked_coarse_raycolor'].shape, ray_masks.cpu().numpy().shape)
+                visuals['ray_masked_coarse_raycolor'][ray_masks.view(H, W).cpu().numpy() <= 0,:] = 0.0
+            if 'ray_depth_masked_coarse_raycolor' in model.visual_names:
+                visuals['ray_depth_masked_coarse_raycolor'] = np.copy(visuals["coarse_raycolor"]).reshape(H, W, 3)
+                visuals['ray_depth_masked_coarse_raycolor'][model.output["ray_depth_mask"][0].cpu().numpy() <= 0] = 0.0
+
+            img_color  = torch.from_numpy(np.array(np.copy(visuals["coarse_raycolor"])))
+            img_color = convert(img_color, 0, 1, self.H, self.W)
+            save_image(img_color,os.path.join(camera_rgb_dir,"{}.png".format(i)))
+            print("genvid, num.{}  time used: {} s".format(i, time.time() - stime), " at ", camera_rgb_dir)
+        
+        totalView = len(self.camera_path)
+        self.camera_path = []
+        return totalView
         
     def register_dpg(self):
 
@@ -579,7 +720,60 @@ class NeRFGUI:
                     dpg.add_button(label="open checkpoint", callback=lambda: dpg.show_item("checkpoint"))
 
                     dpg.add_button(label="open scene", callback=lambda: dpg.show_item("scene"))
+                
+                
+                def copy_path_callback(sender):
+                    self.save_camera_path = True
+                    print(self.cam.pose())
+                    # print("pose,list",self.camera_path)
 
+                def stop_copy_callback(sender):
+                    self.save_camera_path = False
+
+                def save_path_callback(sender):
+                    # todo 兩種格式輸出pose
+
+                    ckpt_dir = os.path.join(self.opt.checkpoints_dir, self.opt.ckpt_name,"gui") 
+                    camera_path_dir = os.path.join(ckpt_dir,"render_path")
+                    util.mkdir(camera_path_dir)
+                    print(ckpt_dir)
+                    
+                    for i in range(len(self.camera_path)):
+                        pose = self.camera_path[i]
+                        np.savetxt(os.path.join(camera_path_dir,'{}.txt'.format(i)), pose, fmt='%f', delimiter=' ')
+                    
+                    # reset_path()
+
+                def reset_path():
+                    self.save_camera_path = False
+                    self.camera_path = []
+                    print("reset camera poses:", self.camera_path)
+
+                def reset_path_callback(sender):
+                    print("123")
+                    reset_path()
+                
+                with dpg.group(horizontal=True):
+                    dpg.add_button(label="copy path", callback=copy_path_callback)
+                    dpg.add_button(label="pause", callback=stop_copy_callback)
+                    dpg.add_button(label="save", callback=save_path_callback)
+                    dpg.add_button(label="reset", callback=reset_path_callback)
+                
+
+
+                def gen_vid_callback(sender):
+                    
+
+                    #todo 
+                    # pycuda + 多線程 會爆cuFuncSetBlockShape failed: invalid resource handle
+                    #  例子https://www.oomake.com/question/1486019
+
+                    # self.renderlist()
+                    self.gen_vid = True
+                    print(1)
+                    
+                
+                dpg.add_button(label="genvid", callback=gen_vid_callback)
 
                 # def callback_reset_object(sender, app_data):
                 #     self.reset_object()
@@ -748,6 +942,7 @@ def main():
     with torch.no_grad():
         test_opt.nerf_splits = ["test"]
         test_opt.split = "test"
+        test_opt.ckpt_name = opt.name
         test_opt.name = opt.name + "/test_{}".format(resume_iter)
         test_opt.test_num_step = opt.test_num_step
         

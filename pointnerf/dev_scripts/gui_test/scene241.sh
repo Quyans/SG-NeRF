@@ -2,10 +2,10 @@
 
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='scene241_step50_640480'
+name='scene241_step5_640480'
 
 resume_iter=best #latest
-train_step=50
+train_step=5
 data_root="${nrDataRoot}/scannet/scans/"
 scan="scene0241_02"
 img_wh=" 640 480 "
@@ -118,9 +118,9 @@ gpu_ids='0'
 checkpoints_dir="${nrCheckpoint}/scannet/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
-save_iter_freq=10000
+save_iter_freq=20000
 save_point_freq=10000 #301840 #1
-maximum_step=100000 #500000 #250000 #800000
+maximum_step=200000 #500000 #250000 #800000
 
 niter=10000 #1000000
 niter_decay=10000 #250000
@@ -129,7 +129,7 @@ n_threads=2
 train_and_test=0 #1
 test_num=10
 test_freq=10000 #  #100 #1200 #1200 #30184 #30184 #50000
-print_freq=40
+print_freq=100
 test_num_step=500
 
 prob_freq=50000000 #10001
