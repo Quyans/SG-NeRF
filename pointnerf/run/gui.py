@@ -46,7 +46,7 @@ def gen_video(output_dir, img_dir, name, steps):
         img_lst.append(img_arry)
     stacked_imgs = [to8b(img_arry) for img_arry in img_lst]
     filename = 'video_{}.mov'.format( name)
-    imageio.mimwrite(os.path.join(output_dir, filename), stacked_imgs, fps=20, quality=10)
+    imageio.mimwrite(os.path.join(output_dir, filename), stacked_imgs, fps=10, quality=10)
     filename = 'video_{}.gif'.format( name)
     imageio.mimwrite(os.path.join(output_dir, filename), stacked_imgs, fps=5, format='GIF')
 
@@ -613,7 +613,7 @@ class NeRFGUI:
             img_color  = torch.from_numpy(np.array(np.copy(visuals["coarse_raycolor"])))
             img_color = convert(img_color, 0, 1, self.H, self.W)
             save_image(img_color,os.path.join(camera_rgb_dir,"{}.png".format(i)))
-            print("genvid, num.{}  time used: {} s".format(i, time.time() - stime), " at ", camera_rgb_dir)
+            print("genvid, num.{} in {}  time used: {} s".format(i,len(pose_list), time.time() - stime), " at ", camera_rgb_dir)
         
         totalView = len(self.camera_path)
         self.camera_path = []
