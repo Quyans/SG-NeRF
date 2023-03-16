@@ -2,10 +2,10 @@
 
 nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
-name='scene241_step50_640480'
+name='scene241_step5_640480'
 
 resume_iter=best #latest
-train_step=50
+train_step=5
 data_root="${nrDataRoot}/scannet/scans/"
 scan="scene0241_02"
 img_wh=" 640 480 "

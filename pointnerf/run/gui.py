@@ -24,11 +24,50 @@ from render_vid import render_vid
 from utils.visualizer import save_image
 import imageio
 
+import glob
+
+import mitsuba
+mitsuba.set_variant('scalar_rgb')
+from mitsuba.core import ScalarTransform4f, AnimatedTransform
+import numpy as np
+# from frame import *
+
 """
 可视化pointnerf的时候 将 semantic_guidance和 predict_semantic开关设为0 并且把 shading_feature_mlp_layer2_bpnet 设为0
 SGNeRF 则相反
 
+需要先copy path 然後save path 然後可以選擇genvid
+然後渲染出視頻後可以在服務器使用 vlc xxx.mov 直接遠程播放視頻
 """
+
+
+""" test poses
+global_poses = [
+
+[[-0.985777, -0.099129, -0.00645934, 1.22676],
+ [-0.279312, 0.391849, -0.876607, 2.73202],
+ [-0.0114557, -0.914236, -0.405019, 1.37772],
+ [0, 0, 0, 1]],
+[[-0.985773, -0.0991183, -0.00393758, 1.23166],
+ [-0.281377, 0.391805, -0.875955, 2.7339],
+ [-0.0124243, -0.914258, -0.404949, 1.378],
+ [0, 0, 0, 1]],
+[[-0.985764, -0.0991075, -0.00141895, 1.23656],
+ [-0.283442, 0.391761, -0.875297, 2.73577],
+ [-0.0133939, -0.91428, -0.404877, 1.37829],
+ [0, 0, 0, 1]],
+[[-0.985749, -0.0990965, 0.00109661, 1.24146],
+ [-0.285508, 0.391717, -0.874633, 2.73765],
+ [-0.0143645, -0.914302, -0.404801, 1.37857],
+ [0, 0, 0, 1]],
+[[-0.985729, -0.0990855, 0.003609, 1.24636],
+ [-0.287576, 0.391672, -0.873963, 2.73952],
+ [-0.0153361, -0.914323, -0.404722, 1.37885],
+ [0, 0, 0, 1]],
+]
+global_poses = np.array(global_poses)
+"""
+
 
 def to8b(x): return (255*np.clip(x, 0, 1)).astype(np.uint8)
 
@@ -45,7 +84,7 @@ def gen_video(output_dir, img_dir, name, steps):
         img_arry = read_image(img_filepath, dtype=np.float32)
         img_lst.append(img_arry)
     stacked_imgs = [to8b(img_arry) for img_arry in img_lst]
-    filename = 'video_{}.mov'.format( name)
+    filename = 'video_quality_{}.mov'.format( name)
     imageio.mimwrite(os.path.join(output_dir, filename), stacked_imgs, fps=10, quality=10)
     filename = 'video_{}.gif'.format( name)
     imageio.mimwrite(os.path.join(output_dir, filename), stacked_imgs, fps=5, format='GIF')
@@ -56,41 +95,6 @@ def convert(x, min_value, max_value, h, w):
     x = x.squeeze(0).transpose(0, -1).contiguous()
     # return ((x - min_value) / (max_value - min_value)).detach().clamp(0, 1).cpu().numpy()
     return x.numpy()
-
-def custom_meshgrid(*args):
-    # ref: https://pytorch.org/docs/stable/generated/torch.meshgrid.html?highlight=meshgrid#torch.meshgrid
-    return torch.meshgrid(*args)
-
-def get_rays(poses, intrinsics, H, W):
-    ''' get rays
-    Args:
-        poses: [B, 4, 4], cam2world
-        intrinsics: [4]
-        H, W, N: int
-        error_map: [B, 128 * 128], sample probability based on training error
-    Returns:
-        rays_o, rays_d: [B, N, 3]
-        inds: [B, N]
-    '''
-
-    B = poses.shape[0]
-    fx, fy, cx, cy = intrinsics
-
-    i, j = custom_meshgrid(torch.linspace(0, W-1, W, device=device), torch.linspace(0, H-1, H, device=device)) # float
-    i = i.t().reshape([1, H*W]).expand([B, H*W]) + 0.5
-    j = j.t().reshape([1, H*W]).expand([B, H*W]) + 0.5
-
-    zs = torch.ones_like(i)
-    xs = (i - cx) / fx * zs
-    ys = (j - cy) / fy * zs
-    directions = torch.stack((xs, ys, zs), dim=-1)
-    directions = directions / torch.norm(directions, dim=-1, keepdim=True)
-    rays_d = directions @ poses[:, :3, :3].transpose(-1, -2) # (B, N, 3)
-
-    rays_o = poses[..., :3, 3] # [B, 3]
-    rays_o = rays_o[..., None, :].expand_as(rays_d) # [B, N, 3]
-
-    return rays_o, rays_d
 
 def seed_everything(seed):
     random.seed(seed)
@@ -119,12 +123,6 @@ class Camera:
                            [-0.193549, 0.378740, -0.905039, 2.732021],
                            [0.026327, -0.920145, -0.390692, 1.377719],
                            [0, 0, 0, 1]], dtype=np.float32)
-
-        # # 第一张的位姿
-        # -0.980738 -0.099445-0.099445 1.226757
-        # -0.193549 0.378740 -0.905039 2.732021
-        # 0.026327 -0.920145 -0.390692 1.377719
-        # 0.000000 0.000000 0.000000 1.000000
 
     def pose(self):
         return self.T
@@ -207,6 +205,7 @@ class NeRFGUI:
 
         self.render_buffer = np.zeros((self.W, self.H, 3), dtype=np.float32)
         self.need_update = True # camera moved, should reset accumulation
+        self.render_rgblist = False #
         self.gen_vid = False # generate video
         self.spp = 1 # sample per pixel
         self.mode = 'image' # choose from ['image', 'depth', 'segments']
@@ -216,7 +215,9 @@ class NeRFGUI:
         self.downscale = 0.1
 
         self.save_camera_path = False
+        # self.camera_path = global_poses
         self.camera_path = []
+        self.set_cameras = [] #存放设置的camera
 
         dpg.create_context()
         self.register_dpg()
@@ -234,122 +235,26 @@ class NeRFGUI:
         self.semantic_fn = semantic_fn
         self.rgb_fn = lambda x, d: self.system.nerf_container.rgb_fn(x, d, radiance_param)
 
-    """
-    # 用teststep方法，此方法废弃
-    def test_step(self):
-        if self.need_update and self.inited:
-        
-            starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
-            starter.record()
-            H = int(self.H * self.downscale)
-            W = int(self.W * self.downscale)
-            intrinsics = self.cam.intrinsics() * self.downscale 
-            # print(self.cam.pose())
-            pose = torch.from_numpy(self.cam.pose()).unsqueeze(0).to(device)
 
-            rays_o, rays_d = get_rays(pose, intrinsics, H, W)
-
-            rays_o, rays_d = rays_o.view(1, 1, -1, 3), rays_d.view(1, 1, -1, 3)
-
-            # from render.simple_render import render
-            density_fn = self.density_fn
-
-            ray_size = rays_o.shape[2]
-            chunk_size = 128 * 128 * 4
-
-            if self.mode == 'image':
-                feature_fn = self.rgb_fn
-                imgs = []
-                i = 0
-                while i < ray_size:
-                    chunk_size = (ray_size - i) if (i + chunk_size > ray_size) else chunk_size
-                        
-                    img = self.system.render(rays_o[:, :, i:i+chunk_size], rays_d[:, :, i:i+chunk_size], density_fn=density_fn, feature_fn=feature_fn, feature_fn_need_rays_d=True, **self.system.render_args, perturb=False, return_depth=False)
-                        
-                    imgs.append(img)
-                    i += chunk_size
-
-                if i == 0:
-                    imgs = imgs[0]
-                else:
-                    imgs = torch.cat(imgs, dim=2)
-                    
-                img = imgs.reshape(H, W, 3)
-                img = convert(img, 0, 1, self.H, self.W)
-            elif self.mode == 'segments':
-                feature_fn = self.semantic_fn
-                imgs = []
-                i = 0
-                while i < ray_size:
-                    chunk_size = (ray_size - i) if (i + chunk_size > ray_size) else chunk_size
-                        
-                    img = self.system.render(rays_o[:, :, i:i+chunk_size], rays_d[:, :, i:i+chunk_size], density_fn=density_fn, feature_fn=feature_fn, **self.system.render_args, perturb=False, return_depth=False)
-                        
-                    imgs.append(img)
-                    i += chunk_size
-
-                if i == 0:
-                    imgs = imgs[0]
-                else:
-                    imgs = torch.cat(imgs, dim=2)
-
-                imgs = label2color(imgs.argmax(-1))
-                img = imgs.reshape(H, W, 3)
-                
-                img = convert(img, 0, 1, self.H, self.W)
-                # elif self.mode == 'depth':
-                #     depth = torch.zeros(B, H * W, device=device)
-                #     depth[ids] = packed_sum(vw.view(-1) * rsts['t'].view(-1), hit_ray_pack_infos)
-                #     depth = depth + (1 - vw_sum) * rsts['t'].max()
-                #     depth = depth.reshape(H, W, 1)
-
-                #     return convert(depth.repeat(1, 1, 3), depth.max(), 0, self.H, self.W)
-                # elif self.mode == 'nablas':
-                #     nablas = torch.zeros(B, H * W, 3, device=device)
-                #     nablas[ids] = packed_sum(vw.view(-1,1) * rsts['nablas'].view(-1,3), hit_ray_pack_infos)
-                #     nablas = nablas.reshape(H, W, 3)
-                #     return convert(nablas, -1, 1, self.H, self.W)
-                    
-
-            ender.record()
-            torch.cuda.synchronize()
-            t = starter.elapsed_time(ender)
-
-            # update dynamic resolution
-            if self.dynamic_resolution:
-                # max allowed infer time per-frame is 200 ms
-                full_t = t / (self.downscale ** 2)
-                downscale = min(1, max(1/4, math.sqrt(100 / full_t)))
-                if downscale > self.downscale * 1.2 or downscale < self.downscale * 0.8:
-                    self.downscale = downscale
-
-            if self.need_update:
-                self.render_buffer = img
-                self.spp = 1
-                self.need_update = False
-            else:
-                self.render_buffer = (self.render_buffer * self.spp + img) / (self.spp + 1)
-                self.spp += 1
-
-            dpg.set_value("_log_infer_time", f'{t:.4f}ms ({int(1000/t)} FPS)')
-            dpg.set_value("_log_resolution", f'{int(self.downscale * self.W)}x{int(self.downscale * self.H)}')
-            dpg.set_value("_log_spp", self.spp)
-            dpg.set_value("_texture", self.render_buffer)
-"""
     
     def teststep(self , test_steps=0, lpips=True):
         
-        # if self.need_update and self.inited:
-        if self.gen_vid:
-
+        
+        if self.gen_vid or self.render_rgblist:
             ckpt_dir = os.path.join(self.opt.checkpoints_dir, self.opt.ckpt_name,"gui") 
             camera_rgb_dir = os.path.join(ckpt_dir,"render_img")
-            totalView = self.renderlist(camera_rgb_dir)
-
             
-            gen_video(ckpt_dir,camera_rgb_dir,"test",totalView)
-            self.gen_vid = False
-        elif self.need_update and True:
+            totalView = len([n for n in glob.glob(camera_rgb_dir + "/*.png") if os.path.isfile(n)])
+            if self.render_rgblist:
+                totalView = self.renderlist(camera_rgb_dir)
+                print("==============================Finish render List==============================")
+                self.render_rgblist = False
+
+            if self.gen_vid:
+                gen_video(ckpt_dir,camera_rgb_dir,"test",totalView)
+                print("==============================Finish Generating Video==============================")
+                self.gen_vid = False
+        elif self.need_update:
             starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
             starter.record()
 
@@ -423,17 +328,6 @@ class NeRFGUI:
                 data['raydir'] = raydir[:, start:end, :]
                 data["pixel_idx"] = pixel_idx[:, start:end, :]
                 model.set_input(data)
-
-                # if opt.bgmodel.endswith("plane"):
-                #     img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, fg_masks, bg_ray_lst = bg_info
-                #     if len(bg_ray_lst) > 0:
-                #         bg_ray_all = bg_ray_lst[data["id"]]
-                #         bg_idx = data["pixel_idx"].view(-1,2)
-                #         bg_ray = bg_ray_all[:, bg_idx[:,1].long(), bg_idx[:,0].long(), :]
-                #     else:
-                #         xyz_world_sect_plane = mvs_utils.gen_bg_points(data)
-                #         bg_ray, _ = model.set_bg(xyz_world_sect_plane, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, data["plane_color"], fg_masks=fg_masks, vis=visualizer)
-                #     data["bg_ray"] = bg_ray
 
                 model.test()
                 curr_visuals = model.get_current_visuals(data=data)
@@ -545,18 +439,9 @@ class NeRFGUI:
         visualizer.reset()
 
         count = 0
+        # pose_list = []
         pose_list = self.camera_path
-        # pose_list = [
-        #     np.array([[-0.980738, -0.099445, -0.099445,  1.226757],
-        #         [-0.193549, 0.378740, -0.905039, 2.732021],
-        #         [0.026327, -0.920145, -0.390692, 1.377719],
-        #         [0, 0, 0, 1]], dtype=np.float32),
-
-        #     np.array([[-0.9, -0.09, -0.099445,  1.226757],
-        #     [-0.193549, 0.378740, -0.905039, 1.732021],
-        #     [0.026327, -0.920145, -0.390692, 1.577719],
-        #     [0, 0, 0, 1]], dtype=np.float32)
-        # ]
+  
 
         for i in range(len(pose_list)):
             pose = pose_list[i]
@@ -714,13 +599,50 @@ class NeRFGUI:
                 dpg.add_file_dialog(
                         directory_selector=False, show=False, callback=callback_open_scene, tag="scene", default_path='/data/hc/ScanNet_NERF_dataset/val/scene0019_00/', default_filename='ngp.pth')
 
+                #TODO  完成checkpoint的替换
+                # with dpg.group(horizontal=True):
+                #     dpg.add_button(label="open checkpoint", callback=lambda: dpg.show_item("checkpoint"))
+                #     dpg.add_button(label="open scene", callback=lambda: dpg.show_item("scene"))
+                
+                
+                def add_camera_callback(sender):
+                    pose = self.cam.pose()
+                    print(pose)
+                    self.set_cameras.append(pose)
+                    # self.camera_path
+                    
+                def generate_path_callback(sender):
+                    # for pose in self.camera_path:
+                    #     print(pose)
+                    c2w = self.set_cameras
+
+                    fps=60
+                    time_step = 0.5
+                    ani=AnimatedTransform()
+                    time_array = []
+                    print(len(c2w))
+                    print(c2w[0])
+
+                    
+                    for i in range(0,len(c2w)):
+                        print("i is :",i)
+                        time_array.append(time_step*i)
+                        ani.append(time_array[i],ScalarTransform4f(c2w[i]))
+                    
+                    # 清空原本的camera_path
+                    self.camera_path = []
+
+                    for t in np.arange(time_array[0],time_array[-1],step=1./fps):
+                        self.camera_path.append(ani.eval(t).matrix.numpy()) #转为numpy对象
+                        # print(ani.eval(t))
+                    
+                    save_path()
+                    print("============finush generating path,total {} setting cameras, generate to {} poses".format(len(c2w),len(self.camera_path)))
+
 
                 with dpg.group(horizontal=True):
-
-                    dpg.add_button(label="open checkpoint", callback=lambda: dpg.show_item("checkpoint"))
-
-                    dpg.add_button(label="open scene", callback=lambda: dpg.show_item("scene"))
-                
+                    dpg.add_button(label="add camera", callback=add_camera_callback)
+                    dpg.add_button(label="generate path", callback=generate_path_callback)
                 
                 def copy_path_callback(sender):
                     self.save_camera_path = True
@@ -730,9 +652,9 @@ class NeRFGUI:
                 def stop_copy_callback(sender):
                     self.save_camera_path = False
 
-                def save_path_callback(sender):
-                    # todo 兩種格式輸出pose
 
+                def save_path():
+                    # todo 兩種格式輸出pose
                     ckpt_dir = os.path.join(self.opt.checkpoints_dir, self.opt.ckpt_name,"gui") 
                     camera_path_dir = os.path.join(ckpt_dir,"render_path")
                     util.mkdir(camera_path_dir)
@@ -740,17 +662,24 @@ class NeRFGUI:
                     
                     for i in range(len(self.camera_path)):
                         pose = self.camera_path[i]
+                        print("save！！")
+                        print(pose)
+                        print(pose.shape)
+
                         np.savetxt(os.path.join(camera_path_dir,'{}.txt'.format(i)), pose, fmt='%f', delimiter=' ')
+
+                def save_path_callback(sender):
+                    save_path()
+                    
                     
                     # reset_path()
 
                 def reset_path():
                     self.save_camera_path = False
                     self.camera_path = []
-                    print("reset camera poses:", self.camera_path)
+                    print("succeed reset camera poses:", self.camera_path)
 
                 def reset_path_callback(sender):
-                    print("123")
                     reset_path()
                 
                 with dpg.group(horizontal=True):
@@ -759,11 +688,9 @@ class NeRFGUI:
                     dpg.add_button(label="save", callback=save_path_callback)
                     dpg.add_button(label="reset", callback=reset_path_callback)
                 
-
-
+                def render_rgb_callback(sender):
+                    self.render_rgblist = True
                 def gen_vid_callback(sender):
-                    
-
                     #todo 
                     # pycuda + 多線程 會爆cuFuncSetBlockShape failed: invalid resource handle
                     #  例子https://www.oomake.com/question/1486019
@@ -771,29 +698,11 @@ class NeRFGUI:
                     # self.renderlist()
                     self.gen_vid = True
                     print(1)
-                    
+
+                with dpg.group(horizontal=True):
+                    dpg.add_button(label="renderRGB", callback=render_rgb_callback)            
+                    dpg.add_button(label="genvid", callback=gen_vid_callback)
                 
-                dpg.add_button(label="genvid", callback=gen_vid_callback)
-
-                # def callback_reset_object(sender, app_data):
-                #     self.reset_object()
-                #     self.need_update = True
-
-                # dpg.add_button(label='reset_object', callback=callback_reset_object)
-
-                # fov slider
-                # def callback_set_fovy(sender, app_data):
-                #     self.cam.fovy = app_data
-                #     self.need_update = True
-
-                # dpg.add_slider_int(label="FoV (vertical)", min_value=1, max_value=120, format="%d deg", default_value=self.cam.fovy, callback=callback_set_fovy)
-
-                # # max_steps slider
-                # def callback_set_max_steps(sender, app_data):
-                #     self.opt.max_steps = app_data
-                #     self.need_update = True
-
-                # dpg.add_slider_int(label="max steps", min_value=1, max_value=1024, format="%d", default_value=self.opt.max_steps, callback=callback_set_max_steps)
 
         ### register camera handler
 
@@ -878,6 +787,40 @@ def get_latest_epoch(resume_dir):
 
 def main():
 
+    # c2w = [
+    #     [[1,2,3,2],
+    #     [1,2,2,2],
+    #     [1,2,1,1],
+    #     [0,0,0,1]],
+
+    #     [[1,0,1,0],
+    #     [1,2,2,5],
+    #     [1,3,1,4],
+    #     [0,0,0,1]]
+        
+    # ]
+
+    # fps=60
+    # time_step = 0.5
+    # ani=AnimatedTransform()
+    # time_array = []
+    # print(len(c2w))
+    # print(c2w[0])
+
+    
+    # for i in range(0,len(c2w)):
+    #     print("i is :",i)
+    #     time_array.append(time_step*i)
+    #     ani.append(time_array[i],ScalarTransform4f(c2w[i]))
+    
+    # # 清空原本的camera_path
+    # camera_path = []
+
+    # for t in np.arange(time_array[0],time_array[-1],step=1./fps):
+    #     camera_path.append(ani.eval(t))
+    #     # print(ani.eval(t))
+
+
     torch.backends.cudnn.benchmark = True
 
     opt = TrainOptions().parse()
@@ -932,6 +875,7 @@ def main():
     test_opt.n_threads = 0
     test_opt.prob = 0
     test_opt.split = "test"
+    test_opt.fps=60
     visualizer.reset()
 
     fg_masks = None
@@ -959,17 +903,5 @@ def main():
 
 
 if __name__ == '__main__':
-    # # import utils
-    # from main import NeRF2SemanticSystem
-    # from utils import import_str, label2color, seed_everything, safe_log, get_args
-    # # import utils
-    # path = os.environ.get('CONFIG' ,'./configs/scannet_triplane.yaml')
-
-    # args = get_args(path)
-    # system = NeRF2SemanticSystem(args).to(device)
-
-    # with torch.no_grad():
-    #     gui = NeRFGUI(system)
-
     main()
        

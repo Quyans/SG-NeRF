@@ -5,7 +5,7 @@ nrCheckpoint="../checkpoints"
 nrDataRoot="../data_src"
 # name='scene024102_Semantic_step50_debug2'
 
-name='scene24102_step50_nostep_sparse_20000points_scale10_vsize0.016'
+name='scene24102_step50_nostep_sparse_20000points_scale10_vsize0.016_0'
 
 
 train_step=50

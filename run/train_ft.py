@@ -1133,6 +1133,7 @@ def create_comb_dataset(test_opt, opt, total_steps, prob=None, test_num_step=1):
 import torch.backends.cudnn as cudnn
 from MinkowskiEngine import SparseTensor, CoordsManager
 if __name__ == '__main__':
+    print("fuck")
     # import pydevd_pycharm
     # pydevd_pycharm.settrace('localhost', port=10086, stdoutToServer=True, stderrToServer=True)
 
