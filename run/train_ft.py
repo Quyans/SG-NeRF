@@ -1149,11 +1149,7 @@ if __name__ == '__main__':
     # os.environ["CUDA_VISIBLE_DEVICES"] = '0'
     cudnn.benchmark = True
     torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.enabled = False
-
-    print("FUCK!!!!!!!!!!!!!!!!!!!1")
+    torch.backends.cudnn.enabled = False    
     # torch.cuda.set_device(0)
-    
-
 
     main()

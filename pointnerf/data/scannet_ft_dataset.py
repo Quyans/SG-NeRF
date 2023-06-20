@@ -251,7 +251,7 @@ class ScannetFtDataset(BaseDataset):
         parser.add_argument(
             '--train_step',
             type=int,
-            default=50,
+            default=5,
             help="train step"
         )
         parser.add_argument(

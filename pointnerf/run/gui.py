@@ -129,11 +129,8 @@ class Camera:
     
 
     def intrinsics(self,f=None):
-
-        
         if f==None:
             # 变焦
-
             # np.radians 将角度转为弧度制 因为np.tan输入是弧度
             self.focal = self.H / (2 * np.tan(np.radians(self.fovy) / 2))
         else:
@@ -753,7 +750,7 @@ class NeRFGUI:
             dpg.add_mouse_wheel_handler(callback=callback_mouse_wheel)
             dpg.add_key_press_handler(callback=callback_key_press)
 
-        dpg.create_viewport(title='Project-A', width=self.W, height=self.H, resizable=False)
+        dpg.create_viewport(title='Neural rendering roaming software', width=self.W, height=self.H, resizable=False)
 
 
 
