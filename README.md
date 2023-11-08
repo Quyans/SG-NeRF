@@ -1,16 +1,9 @@
-Code is based on awesome SG-NeRF.
-```
-@article{xu2022point,
-  title={Point-NeRF: Point-based Neural Radiance Fields},
-  author={Xu, Qiangeng and Xu, Zexiang and Philip, Julien and Bi, Sai and Shu, Zhixin and Sunkavalli, Kalyan and Neumann, Ulrich},
-  journal={arXiv preprint arXiv:2201.08845},
-  year={2022}
-}
-```
+This is the officially implemented of paper "SG-NeRF: Semantic-guided Point-based Neural Radiance Fields"
+
+
 
 
 ### Light field browser GUI
-
 
 Attention！！！
 相机插值功能基于 mitsuba2 开发，只能是mitsuba2，不能是mitsuba3
@@ -42,3 +35,14 @@ import mitsuba
 mitsuba.set_variant('scalar_rgb')
 from mitsuba.core import ScalarTransform4f, AnimatedTransform
 `
+
+
+Code is based on awesome Point-NeRF.
+```
+@article{xu2022point,
+  title={Point-NeRF: Point-based Neural Radiance Fields},
+  author={Xu, Qiangeng and Xu, Zexiang and Philip, Julien and Bi, Sai and Shu, Zhixin and Sunkavalli, Kalyan and Neumann, Ulrich},
+  journal={arXiv preprint arXiv:2201.08845},
+  year={2022}
+}
+```
