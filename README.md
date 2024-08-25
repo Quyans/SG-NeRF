@@ -1,11 +1,10 @@
+# SG-NeRF
 This is the officially implemented of paper "SG-NeRF: Semantic-guided Point-based Neural Radiance Fields"
-
 
 
 
 ### Light field browser GUI
 
-Attention！！！
 相机插值功能基于 mitsuba2 开发，只能是mitsuba2，不能是mitsuba3
 
 要求 gcc>=8.4
